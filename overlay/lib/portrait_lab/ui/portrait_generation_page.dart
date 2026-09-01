@@ -129,16 +129,29 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
     );
     final runtimeProfile = LocalDiffusionRuntimeProfile.forRequest(request);
     final computeBackend = PortraitComputeBackendRegistry.current;
+    final usingDream = widget.modelPath.startsWith('dream://');
     final hasSamplingProgress = _steps > 0;
     final progress = hasSamplingProgress ? (_step / _steps).clamp(0.0, 1.0) : null;
     final percent = progress == null ? null : (progress * 100).round();
     final currentStage = _stageIndex();
     final elapsedSeconds = _stopwatch.elapsedMilliseconds / 1000.0;
 
+    final backendTitle = usingDream
+        ? 'DREAM NPU 本地生成'
+        : computeBackend.isGpuAccelerated
+            ? 'GPU 本地生成'
+            : '本地生成 · CPU 回退';
+    final diagnosticLabel = usingDream
+        ? 'NPU · QNN/HTP · DREAM FastPath'
+        : '${computeBackend.displayLabel} · ${runtimeProfile.isFastPath ? 'LCM FAST · ' : ''}${runtimeProfile.label}';
+    final diagnosticDetail = usingDream
+        ? '127.0.0.1:8081 · SDXL 1024 → 3:4 · 已运行 ${elapsedSeconds.toStringAsFixed(1)}s'
+        : '${computeBackend.detailLabel} · 中心裁剪 ${request.width}×${request.height} RGB · 已运行 ${elapsedSeconds.toStringAsFixed(1)}s';
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          computeBackend.isGpuAccelerated ? 'GPU 本地生成' : '本地生成 · CPU 回退',
+          backendTitle,
           style: const TextStyle(fontWeight: FontWeight.w900),
         ),
         automaticallyImplyLeading: false,
@@ -190,7 +203,11 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
                         ],
                       ),
                       child: Icon(
-                        _cancelled ? Icons.stop_rounded : Icons.auto_awesome_rounded,
+                        _cancelled
+                            ? Icons.stop_rounded
+                            : usingDream
+                                ? Icons.bolt_rounded
+                                : Icons.auto_awesome_rounded,
                         size: 39,
                         color: _brand,
                       ),
@@ -214,27 +231,33 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
               key: const Key('portrait-runtime-diagnostics'),
               padding: const EdgeInsets.all(13),
               decoration: BoxDecoration(
-                color: computeBackend.isGpuAccelerated
-                    ? const Color(0xFFE8F2FF)
-                    : runtimeProfile.isFastPath
-                        ? const Color(0xFFEDE8FF)
-                        : const Color(0xFFF3F1F6),
+                color: usingDream
+                    ? const Color(0xFFEDE8FF)
+                    : computeBackend.isGpuAccelerated
+                        ? const Color(0xFFE8F2FF)
+                        : runtimeProfile.isFastPath
+                            ? const Color(0xFFEDE8FF)
+                            : const Color(0xFFF3F1F6),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
-                    computeBackend.isGpuAccelerated
-                        ? Icons.memory_rounded
-                        : runtimeProfile.isFastPath
-                            ? Icons.bolt_rounded
-                            : Icons.speed_rounded,
-                    color: computeBackend.isGpuAccelerated
-                        ? const Color(0xFF3478F6)
-                        : runtimeProfile.isFastPath
-                            ? const Color(0xFF6D4CF5)
-                            : const Color(0xFF756E80),
+                    usingDream
+                        ? Icons.bolt_rounded
+                        : computeBackend.isGpuAccelerated
+                            ? Icons.memory_rounded
+                            : runtimeProfile.isFastPath
+                                ? Icons.bolt_rounded
+                                : Icons.speed_rounded,
+                    color: usingDream
+                        ? const Color(0xFF6D4CF5)
+                        : computeBackend.isGpuAccelerated
+                            ? const Color(0xFF3478F6)
+                            : runtimeProfile.isFastPath
+                                ? const Color(0xFF6D4CF5)
+                                : const Color(0xFF756E80),
                     size: 20,
                   ),
                   const SizedBox(width: 9),
@@ -243,12 +266,13 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${computeBackend.displayLabel} · ${runtimeProfile.isFastPath ? 'LCM FAST · ' : ''}${runtimeProfile.label}',
+                          diagnosticLabel,
+                          key: const Key('portrait-active-backend-label'),
                           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          '${computeBackend.detailLabel} · 中心裁剪 ${request.width}×${request.height} RGB · 已运行 ${elapsedSeconds.toStringAsFixed(1)}s',
+                          diagnosticDetail,
                           style: const TextStyle(fontSize: 11, color: Color(0xFF766F81)),
                         ),
                       ],
@@ -275,7 +299,7 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
                   const _StageConnector(),
                   _StageRow(
                     title: '构建人像形象',
-                    subtitle: '加载本地模型',
+                    subtitle: usingDream ? '启动 DREAM QNN/HTP 模型' : '加载本地模型',
                     state: _stageState(1, currentStage),
                   ),
                   const _StageConnector(),
@@ -342,10 +366,12 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
               ),
             ),
             const SizedBox(height: 10),
-            const Text(
-              'R5 展示实际 FFI backend；若看到 GPU · Vulkan，推理 isolate 也会加载 Vulkan 后端。',
+            Text(
+              usingDream
+                  ? 'R6 通过本机 localhost 调用 DREAM QNN/HTP；照片和结果不离开设备。'
+                  : 'R6 fallback 展示实际 FFI backend；GPU · Vulkan 表示推理 isolate 也加载 Vulkan。',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Color(0xFF96909F), fontSize: 10.5),
+              style: const TextStyle(color: Color(0xFF96909F), fontSize: 10.5),
             ),
           ],
         ),
