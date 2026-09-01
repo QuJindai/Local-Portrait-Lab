@@ -61,11 +61,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('模型管理'), findsOneWidget);
+    expect(find.text('LCM DreamShaper 7 · FAST'), findsOneWidget);
     expect(find.text('Stable Diffusion 1.5'), findsOneWidget);
     expect(find.text('DreamShaper 8'), findsOneWidget);
     expect(find.text('Realistic Vision 6'), findsOneWidget);
     expect(find.text('导入本地模型'), findsOneWidget);
 
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('model-download-sd15')),
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.byKey(const Key('model-download-sd15')));
     await tester.pumpAndSettle();
     expect(downloader.requested?.id, 'sd15');
