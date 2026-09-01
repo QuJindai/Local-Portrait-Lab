@@ -26,6 +26,7 @@ class PortraitGenerationPage extends StatefulWidget {
 }
 
 class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
+  static const _brand = Color(0xFF6D4CF5);
   StreamSubscription<PortraitGenerationState>? _subscription;
   int _step = 0;
   int _steps = 0;
@@ -115,80 +116,253 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
     final hasSamplingProgress = _steps > 0;
     final progress = hasSamplingProgress ? (_step / _steps).clamp(0.0, 1.0) : null;
     final percent = progress == null ? null : (progress * 100).round();
+    final currentStage = _stageIndex();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('正在本地生成'),
+        title: const Text('正在本地生成', style: TextStyle(fontWeight: FontWeight.w900)),
         automaticallyImplyLeading: false,
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Spacer(),
-              Icon(
-                _cancelled ? Icons.stop_circle_outlined : Icons.auto_awesome,
-                size: 64,
-                color: Theme.of(context).colorScheme.primary,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(22, 6, 22, 26),
+          children: [
+            Container(
+              height: 190,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(28),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFFE9E1FF), Color(0xFFFFE6F0)],
+                ),
               ),
-              const SizedBox(height: 24),
-              Text(
-                _cancelled ? '生成已取消' : '正在本地生成',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
+              child: Stack(
+                children: [
+                  Positioned(
+                    right: 18,
+                    top: 16,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xCCFFFFFF),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                      child: Text(
+                        widget.style.spec.displayName,
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                      ),
                     ),
+                  ),
+                  Center(
+                    child: Container(
+                      width: 92,
+                      height: 92,
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Color(0x236D4CF5),
+                            blurRadius: 28,
+                            offset: Offset(0, 10),
+                          )
+                        ],
+                      ),
+                      child: Icon(
+                        _cancelled ? Icons.stop_rounded : Icons.auto_awesome_rounded,
+                        size: 39,
+                        color: _brand,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 10),
-              Text(
-                '${widget.style.spec.displayName} · $_stage',
+            ),
+            const SizedBox(height: 22),
+            Text(
+              _cancelled ? '生成已取消' : '正在本地生成',
+              style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '全部计算在当前设备完成 · $_stage',
+              style: const TextStyle(color: Color(0xFF817A8D), fontSize: 13),
+            ),
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: const Color(0xFFEAE6F0)),
+              ),
+              child: Column(
+                children: [
+                  _StageRow(
+                    title: '分析人物特征',
+                    subtitle: '读取本地照片',
+                    state: _stageState(0, currentStage),
+                  ),
+                  const _StageConnector(),
+                  _StageRow(
+                    title: '构建人像形象',
+                    subtitle: '加载本地模型',
+                    state: _stageState(1, currentStage),
+                  ),
+                  const _StageConnector(),
+                  _StageRow(
+                    title: '生成最终画面',
+                    subtitle: hasSamplingProgress ? '$_step / $_steps · $percent%' : '等待真实进度',
+                    state: _stageState(2, currentStage),
+                  ),
+                  const _StageConnector(),
+                  _StageRow(
+                    title: '保存本地作品',
+                    subtitle: '生成后自动写入应用目录',
+                    state: _stageState(3, currentStage),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: LinearProgressIndicator(
+                minHeight: 9,
+                value: progress,
+                backgroundColor: const Color(0xFFE9E5EF),
+              ),
+            ),
+            const SizedBox(height: 10),
+            if (hasSamplingProgress)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('$_step / $_steps', style: const TextStyle(fontWeight: FontWeight.w800)),
+                  Text('$percent%', style: const TextStyle(color: _brand, fontWeight: FontWeight.w900)),
+                ],
+              )
+            else
+              const Text(
+                '等待模型真实进度回调…',
                 textAlign: TextAlign.center,
+                style: TextStyle(color: Color(0xFF8B8497), fontSize: 12),
               ),
-              const SizedBox(height: 30),
-              LinearProgressIndicator(value: progress),
-              const SizedBox(height: 14),
-              if (hasSamplingProgress)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('$_step / $_steps'),
-                    Text('$percent%'),
-                  ],
-                )
-              else
-                const Text(
-                  '等待模型真实进度回调…',
-                  textAlign: TextAlign.center,
+            if (_error != null) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(13),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFEEEE),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-              if (_error != null) ...[
-                const SizedBox(height: 22),
-                Text(
+                child: Text(
                   _error!,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ],
-              const Spacer(),
-              OutlinedButton.icon(
-                key: const Key('portrait-cancel-generation'),
-                onPressed: _cancelled ? null : _cancel,
-                icon: const Icon(Icons.close),
-                label: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 13),
-                  child: Text('取消生成'),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 12),
                 ),
               ),
-              const SizedBox(height: 8),
+            ],
+            const SizedBox(height: 22),
+            OutlinedButton.icon(
+              key: const Key('portrait-cancel-generation'),
+              onPressed: _cancelled ? null : _cancel,
+              icon: const Icon(Icons.close_rounded),
+              label: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 13),
+                child: Text('取消生成', style: TextStyle(fontWeight: FontWeight.w800)),
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              '照片、模型和生成结果不会上传到服务器。',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Color(0xFF96909F), fontSize: 11),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  int _stageIndex() {
+    if (_cancelled || _error != null) return 2;
+    if (_stage == '准备图片') return 0;
+    if (_stage == '加载本地模型') return 1;
+    if (_stage == '扩散采样') return 2;
+    if (_stage == '完成') return 3;
+    return 0;
+  }
+
+  _StageStatus _stageState(int index, int current) {
+    if (index < current) return _StageStatus.done;
+    if (index == current) return _StageStatus.active;
+    return _StageStatus.pending;
+  }
+}
+
+enum _StageStatus { done, active, pending }
+
+class _StageRow extends StatelessWidget {
+  const _StageRow({required this.title, required this.subtitle, required this.state});
+  final String title;
+  final String subtitle;
+  final _StageStatus state;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = state == _StageStatus.active;
+    final done = state == _StageStatus.done;
+    return Row(
+      children: [
+        Container(
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: active || done ? _PortraitGenerationPageState._brand : const Color(0xFFEDE9F3),
+          ),
+          child: Icon(
+            done ? Icons.check_rounded : active ? Icons.more_horiz_rounded : Icons.circle_outlined,
+            color: active || done ? Colors.white : const Color(0xFFAAA4B2),
+            size: 17,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Text(
-                '生成在当前设备完成，不上传照片或模型。',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall,
+                title,
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: state == _StageStatus.pending ? const Color(0xFF9D97A6) : const Color(0xFF24202A),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: const TextStyle(color: Color(0xFF8D8698), fontSize: 12),
               ),
             ],
           ),
         ),
+      ],
+    );
+  }
+}
+
+class _StageConnector extends StatelessWidget {
+  const _StageConnector();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.only(left: 14),
+      child: SizedBox(
+        height: 20,
+        child: VerticalDivider(width: 1, thickness: 1, color: Color(0xFFE1DDE8)),
       ),
     );
   }
