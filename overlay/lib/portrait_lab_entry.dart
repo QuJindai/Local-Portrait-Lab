@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 
-import 'ffi_bindings.dart';
+import 'portrait_lab/infrastructure/portrait_compute_backend.dart';
 import 'portrait_lab/portrait_lab_app.dart';
 import 'portrait_lab/portrait_runtime.dart';
 import 'portrait_lab/ui/portrait_input_picker.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  FFIBindings.initializeBindings('CPU');
+
+  final backend = PortraitComputeBackendSelector(
+    const FfiPortraitComputeBackendBindings(),
+  ).activateFastPath();
+  PortraitComputeBackendRegistry.install(backend);
 
   runApp(
     PortraitLabApp(
