@@ -21,10 +21,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Flutter 3.24.4 (upstream metadata baseline)
+      - name: Setup Flutter 3.27.4 (upstream lock-compatible baseline)
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.4'
+          flutter-version: '3.27.4'
           channel: stable
           cache: true
 
