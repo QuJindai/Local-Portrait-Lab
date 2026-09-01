@@ -42,10 +42,22 @@ void main() {
     );
 
     expect(find.text('把一张照片，变成新的你'), findsOneWidget);
-    expect(find.text('热门风格'), findsOneWidget);
-    expect(find.text('输出比例'), findsOneWidget);
     expect(find.text('本地模型'), findsOneWidget);
-    expect(find.text('生成我的照片'), findsOneWidget);
     expect(find.byKey(const Key('portrait-hero-photo')), findsOneWidget);
+    expect(find.text('热门风格'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('输出比例'),
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('输出比例'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('生成我的照片'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('生成我的照片'), findsOneWidget);
   });
 }
