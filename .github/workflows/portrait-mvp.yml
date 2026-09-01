@@ -38,7 +38,7 @@ jobs:
         working-directory: _build/local-diffusion
         run: flutter pub get
 
-      - name: Verify portrait domain, flow, download and R4 quality tests
+      - name: Verify portrait domain, flow, download, R4 quality and R5 backend tests
         working-directory: _build/local-diffusion
         shell: bash
         run: |
@@ -48,24 +48,31 @@ jobs:
             echo "No portrait tests committed yet; bootstrap baseline only."
           fi
 
-      - name: Build Portrait Lab R4 debug APK
+      - name: Build Portrait Lab R5 GPU debug APK
         working-directory: _build/local-diffusion
-        run: flutter build apk --debug --target lib/portrait_lab_entry.dart --build-name=0.4.0-r4 --build-number=4
+        run: flutter build apk --debug --target lib/portrait_lab_entry.dart --build-name=0.5.0-r5 --build-number=5
 
-      - name: Stage R4 APK
+      - name: Verify Vulkan GPU runtime is bundled
+        shell: bash
+        run: |
+          APK=_build/local-diffusion/build/app/outputs/flutter-apk/app-debug.apk
+          unzip -l "$APK" | grep -F 'lib/arm64-v8a/libstable-diffusion_vulkan.so'
+          unzip -l "$APK" | grep -F 'lib/arm64-v8a/libstable-diffusion.so'
+
+      - name: Stage R5 APK
         shell: bash
         run: |
           mkdir -p dist
           cp _build/local-diffusion/build/app/outputs/flutter-apk/app-debug.apk \
-            dist/Local-Portrait-Lab_R4_debug.apk
-          sha256sum dist/Local-Portrait-Lab_R4_debug.apk | tee dist/Local-Portrait-Lab_R4_debug.sha256
+            dist/Local-Portrait-Lab_R5_GPU_debug.apk
+          sha256sum dist/Local-Portrait-Lab_R5_GPU_debug.apk | tee dist/Local-Portrait-Lab_R5_GPU_debug.sha256
 
-      - name: Upload Portrait Lab R4 APK
+      - name: Upload Portrait Lab R5 APK
         uses: actions/upload-artifact@v4
         with:
-          name: Local-Portrait-Lab_R4_debug
+          name: Local-Portrait-Lab_R5_GPU_debug
           path: |
-            dist/Local-Portrait-Lab_R4_debug.apk
-            dist/Local-Portrait-Lab_R4_debug.sha256
+            dist/Local-Portrait-Lab_R5_GPU_debug.apk
+            dist/Local-Portrait-Lab_R5_GPU_debug.sha256
           if-no-files-found: error
           retention-days: 14
