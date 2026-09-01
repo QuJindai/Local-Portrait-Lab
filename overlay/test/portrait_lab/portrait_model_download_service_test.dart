@@ -50,7 +50,7 @@ PortraitModelSpec _fixture({String? expectedSha256}) => PortraitModelSpec(
       sizeLabel: '4 B',
       fileName: 'fixture.safetensors',
       downloadUrl: 'https://example.invalid/fixture.safetensors',
-      expectedSha256: expectedSha256,
+      expectedSha256: expectedSha256 ?? '',
     );
 
 void main() {
