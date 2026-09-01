@@ -61,6 +61,11 @@ class PortraitGenerationController {
 
       _emit(PortraitGenerationState.completed(outputPath));
       return outputPath;
+    } catch (_) {
+      if (_cancelled) {
+        throw const PortraitGenerationCancelledException();
+      }
+      rethrow;
     } finally {
       _running = false;
     }
