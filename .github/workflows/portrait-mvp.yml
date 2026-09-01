@@ -34,11 +34,21 @@ jobs:
       - name: Verify Portrait Lab Android identity and storage policy
         run: bash scripts/verify_portrait_android.sh _build/local-diffusion
 
+      - name: Verify R6 localhost-only DREAM network policy
+        shell: bash
+        run: |
+          MANIFEST=_build/local-diffusion/android/app/src/main/AndroidManifest.xml
+          NETCFG=_build/local-diffusion/android/app/src/main/res/xml/portrait_network_security_config.xml
+          grep -F 'android:networkSecurityConfig="@xml/portrait_network_security_config"' "$MANIFEST"
+          grep -F '<domain includeSubdomains="false">127.0.0.1</domain>' "$NETCFG"
+          grep -F '<domain includeSubdomains="false">localhost</domain>' "$NETCFG"
+          grep -F '<base-config cleartextTrafficPermitted="false"' "$NETCFG"
+
       - name: Resolve Flutter packages
         working-directory: _build/local-diffusion
         run: flutter pub get
 
-      - name: Verify portrait domain, flow, download, R4 quality and R5 backend tests
+      - name: Verify portrait domain, R6 DREAM QNN, downloads and fallback tests
         working-directory: _build/local-diffusion
         shell: bash
         run: |
@@ -48,31 +58,31 @@ jobs:
             echo "No portrait tests committed yet; bootstrap baseline only."
           fi
 
-      - name: Build Portrait Lab R5 GPU debug APK
+      - name: Build Portrait Lab R6 DREAM QNN debug APK
         working-directory: _build/local-diffusion
-        run: flutter build apk --debug --target lib/portrait_lab_entry.dart --build-name=0.5.0-r5 --build-number=5
+        run: flutter build apk --debug --target lib/portrait_lab_entry.dart --build-name=0.6.0-r6 --build-number=6
 
-      - name: Verify Vulkan GPU runtime is bundled
+      - name: Verify Vulkan fallback runtime is bundled
         shell: bash
         run: |
           APK=_build/local-diffusion/build/app/outputs/flutter-apk/app-debug.apk
           unzip -l "$APK" | grep -F 'lib/arm64-v8a/libstable-diffusion_vulkan.so'
           unzip -l "$APK" | grep -F 'lib/arm64-v8a/libstable-diffusion.so'
 
-      - name: Stage R5 APK
+      - name: Stage R6 APK
         shell: bash
         run: |
           mkdir -p dist
           cp _build/local-diffusion/build/app/outputs/flutter-apk/app-debug.apk \
-            dist/Local-Portrait-Lab_R5_GPU_debug.apk
-          sha256sum dist/Local-Portrait-Lab_R5_GPU_debug.apk | tee dist/Local-Portrait-Lab_R5_GPU_debug.sha256
+            dist/Local-Portrait-Lab_R6_DREAM_QNN_debug.apk
+          sha256sum dist/Local-Portrait-Lab_R6_DREAM_QNN_debug.apk | tee dist/Local-Portrait-Lab_R6_DREAM_QNN_debug.sha256
 
-      - name: Upload Portrait Lab R5 APK
+      - name: Upload Portrait Lab R6 APK
         uses: actions/upload-artifact@v4
         with:
-          name: Local-Portrait-Lab_R5_GPU_debug
+          name: Local-Portrait-Lab_R6_DREAM_QNN_debug
           path: |
-            dist/Local-Portrait-Lab_R5_GPU_debug.apk
-            dist/Local-Portrait-Lab_R5_GPU_debug.sha256
+            dist/Local-Portrait-Lab_R6_DREAM_QNN_debug.apk
+            dist/Local-Portrait-Lab_R6_DREAM_QNN_debug.sha256
           if-no-files-found: error
           retention-days: 14
