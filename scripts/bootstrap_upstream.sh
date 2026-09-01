@@ -25,17 +25,22 @@ if [[ "$actual" != "$UPSTREAM_COMMIT" ]]; then
   exit 21
 fi
 
-progress "declare Portrait Lab checksum dependency"
+progress "declare Portrait Lab checksum/archive dependencies"
 python3 - "$UPSTREAM_DIR/pubspec.yaml" <<'PY'
 from pathlib import Path
 import sys
 p = Path(sys.argv[1])
 text = p.read_text(encoding='utf-8')
+needle = '  path_provider: ^2.1.5\n'
+if needle not in text:
+    raise SystemExit('path_provider dependency anchor missing')
+extra = ''
 if '\n  crypto:' not in text:
-    needle = '  path_provider: ^2.1.5\n'
-    if needle not in text:
-        raise SystemExit('path_provider dependency anchor missing')
-    text = text.replace(needle, needle + '  crypto: ^3.0.6\n', 1)
+    extra += '  crypto: ^3.0.6\n'
+if '\n  archive:' not in text:
+    extra += '  archive: ^4.0.2\n'
+if extra:
+    text = text.replace(needle, needle + extra, 1)
 p.write_text(text, encoding='utf-8')
 PY
 
