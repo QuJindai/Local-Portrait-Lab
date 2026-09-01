@@ -173,7 +173,7 @@ class NativePortraitModelDownloadService implements PortraitModelDownloadService
     _active = true;
     _cancelRequested = false;
     var received = 0;
-    IOSink? sink;
+    IOSink? cleanupSink;
     PortraitDownloadHttpClient? client;
 
     try {
@@ -212,7 +212,9 @@ class NativePortraitModelDownloadService implements PortraitModelDownloadService
       final total = response.contentLength > 0
           ? received + response.contentLength
           : 0;
-      sink = partFile.openWrite(mode: append ? FileMode.append : FileMode.write);
+      final outputSink =
+          partFile.openWrite(mode: append ? FileMode.append : FileMode.write);
+      cleanupSink = outputSink;
 
       if (received > 0) {
         yield PortraitModelDownloadProgress(
@@ -224,16 +226,16 @@ class NativePortraitModelDownloadService implements PortraitModelDownloadService
 
       await for (final chunk in response.bytes) {
         if (_cancelRequested) {
-          await sink.flush();
-          await sink.close();
-          sink = null;
+          await outputSink.flush();
+          await outputSink.close();
+          cleanupSink = null;
           yield PortraitModelDownloadCancelled(
             model,
             partialBytes: received,
           );
           return;
         }
-        sink.add(chunk);
+        outputSink.add(chunk);
         received += chunk.length;
         yield PortraitModelDownloadProgress(
           model,
@@ -242,9 +244,9 @@ class NativePortraitModelDownloadService implements PortraitModelDownloadService
         );
       }
 
-      await sink.flush();
-      await sink.close();
-      sink = null;
+      await outputSink.flush();
+      await outputSink.close();
+      cleanupSink = null;
 
       if (_cancelRequested) {
         yield PortraitModelDownloadCancelled(model, partialBytes: received);
@@ -277,10 +279,13 @@ class NativePortraitModelDownloadService implements PortraitModelDownloadService
         yield PortraitModelDownloadFailed(model, _humanizeError(error));
       }
     } finally {
-      try {
-        await sink?.flush();
-        await sink?.close();
-      } catch (_) {}
+      final leftover = cleanupSink;
+      if (leftover != null) {
+        try {
+          await leftover.flush();
+          await leftover.close();
+        } catch (_) {}
+      }
       client?.close(force: _cancelRequested);
       _activeClient = null;
       _active = false;
