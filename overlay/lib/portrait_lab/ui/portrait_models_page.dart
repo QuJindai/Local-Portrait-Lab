@@ -72,6 +72,12 @@ class _PortraitModelsPageState extends State<PortraitModelsPage> {
     Navigator.of(context).pop(path);
   }
 
+  void _useDream(PortraitModelSpec model) {
+    final uri = model.dreamSelectionUri;
+    if (uri == null) return;
+    Navigator.of(context).pop(uri);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -82,7 +88,7 @@ class _PortraitModelsPageState extends State<PortraitModelsPage> {
             padding: EdgeInsets.only(right: 16),
             child: Center(
               child: Text(
-                'P06 · 本地模型',
+                'P06 · 模型 / 加速器',
                 style: TextStyle(fontSize: 12, color: Color(0xFF827A91)),
               ),
             ),
@@ -108,7 +114,7 @@ class _PortraitModelsPageState extends State<PortraitModelsPage> {
                     CircleAvatar(
                       radius: 24,
                       backgroundColor: Colors.white,
-                      child: Icon(Icons.cloud_download_rounded,
+                      child: Icon(Icons.memory_rounded,
                           color: Color(0xFF6D4CF5)),
                     ),
                     SizedBox(width: 14),
@@ -117,7 +123,7 @@ class _PortraitModelsPageState extends State<PortraitModelsPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '下载后完全离线使用',
+                            'DREAM QNN 优先 · Vulkan 兼容',
                             style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w900,
@@ -125,7 +131,7 @@ class _PortraitModelsPageState extends State<PortraitModelsPage> {
                           ),
                           SizedBox(height: 4),
                           Text(
-                            '支持断点续传与 SHA-256 完整性校验。模型保存在应用私有目录。',
+                            'DMD2 模型优先复用本机 DREAM 的 QNN/HTP 后端；SafeTensors 继续作为 Portrait Lab Vulkan fallback。',
                             style: TextStyle(
                               fontSize: 12,
                               height: 1.4,
@@ -138,6 +144,24 @@ class _PortraitModelsPageState extends State<PortraitModelsPage> {
                   ],
                 ),
               ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(13),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF7E7),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFF0DFC0)),
+                ),
+                child: const Text(
+                  '使用 DREAM 加速前：在 DREAM 的“远程 / Host”页面开启主机模式一次。Portrait Lab 会自动连接本机 127.0.0.1，不上传照片。',
+                  style: TextStyle(
+                    color: Color(0xFF725C32),
+                    fontSize: 11.5,
+                    height: 1.45,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
               const SizedBox(height: 18),
               OutlinedButton.icon(
                 key: const Key('model-import-custom'),
@@ -145,7 +169,7 @@ class _PortraitModelsPageState extends State<PortraitModelsPage> {
                 icon: const Icon(Icons.folder_open_rounded),
                 label: const Padding(
                   padding: EdgeInsets.symmetric(vertical: 13),
-                  child: Text('导入本地模型'),
+                  child: Text('导入本地 SafeTensors / CKPT'),
                 ),
               ),
               const SizedBox(height: 20),
@@ -155,7 +179,7 @@ class _PortraitModelsPageState extends State<PortraitModelsPage> {
               ),
               const SizedBox(height: 6),
               const Text(
-                '首批均为 SD1.5 单文件 SafeTensors，可直接交给 Local-Diffusion。',
+                '前两项与 DREAM 一致：SDXL DMD2 + Snapdragon QNN/HTP；后面保留 Vulkan/CPU 兼容模型。',
                 style: TextStyle(color: Color(0xFF807889), fontSize: 12),
               ),
               const SizedBox(height: 12),
@@ -169,12 +193,13 @@ class _PortraitModelsPageState extends State<PortraitModelsPage> {
                   onDownload: () => _download(model),
                   onCancel: _cancel,
                   onUse: () => Navigator.of(context).pop(_installed[model.id]),
+                  onUseDream: model.usesDreamQnn ? () => _useDream(model) : null,
                 ),
                 const SizedBox(height: 12),
               ],
               const SizedBox(height: 8),
               const Text(
-                '提示：模型文件通常为 2–4 GB，建议连接 Wi‑Fi 并预留足够存储空间。下载中断后再次点击可继续。',
+                'QNN 独立模型包约 3.7 GB，解压后约 4.2 GB；下载时建议至少预留 9 GB 临时空间。若 DREAM 已有同模型，直接点“使用 DREAM 加速”即可，不需要重复下载。',
                 style: TextStyle(
                   color: Color(0xFF8C8495),
                   fontSize: 11,
@@ -198,6 +223,7 @@ class _ModelCard extends StatelessWidget {
     required this.onDownload,
     required this.onCancel,
     required this.onUse,
+    required this.onUseDream,
   });
 
   final PortraitModelSpec model;
@@ -207,6 +233,7 @@ class _ModelCard extends StatelessWidget {
   final VoidCallback onDownload;
   final VoidCallback onCancel;
   final VoidCallback onUse;
+  final VoidCallback? onUseDream;
 
   @override
   Widget build(BuildContext context) {
@@ -225,7 +252,11 @@ class _ModelCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE9E5EE)),
+        border: Border.all(
+          color: model.usesDreamQnn
+              ? const Color(0xFFD9D0FF)
+              : const Color(0xFFE9E5EE),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -240,8 +271,12 @@ class _ModelCard extends StatelessWidget {
                   color: _accent(model.id),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Icon(Icons.auto_awesome_rounded,
-                    color: Color(0xFF544A67)),
+                child: Icon(
+                  model.usesDreamQnn
+                      ? Icons.bolt_rounded
+                      : Icons.auto_awesome_rounded,
+                  color: const Color(0xFF544A67),
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -257,11 +292,15 @@ class _ModelCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      '${model.sizeLabel} · ${model.format}',
-                      style: const TextStyle(
+                      model.usesDreamQnn
+                          ? 'NPU · QNN · SDXL · DMD2 · 1024'
+                          : '${model.sizeLabel} · ${model.format}',
+                      style: TextStyle(
                         fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF7E768A),
+                        fontWeight: FontWeight.w800,
+                        color: model.usesDreamQnn
+                            ? const Color(0xFF6D4CF5)
+                            : const Color(0xFF7E768A),
                       ),
                     ),
                   ],
@@ -289,10 +328,8 @@ class _ModelCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  _bytes(progress.receivedBytes),
-                  style: const TextStyle(fontSize: 10),
-                ),
+                Text(_bytes(progress.receivedBytes),
+                    style: const TextStyle(fontSize: 10)),
                 Text(
                   progress.totalBytes > 0
                       ? '${((progress.fraction ?? 0) * 100).round()}%'
@@ -307,15 +344,20 @@ class _ModelCard extends StatelessWidget {
           ],
           if (verifying) ...[
             const SizedBox(height: 10),
-            const Row(
+            Row(
               children: [
-                SizedBox(
+                const SizedBox(
                   width: 15,
                   height: 15,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
-                SizedBox(width: 8),
-                Text('正在校验 SHA-256…', style: TextStyle(fontSize: 11)),
+                const SizedBox(width: 8),
+                Text(
+                  model.isArchive
+                      ? '正在校验并流式解压 QNN 模型包…'
+                      : '正在校验 SHA-256…',
+                  style: const TextStyle(fontSize: 11),
+                ),
               ],
             ),
           ],
@@ -337,37 +379,77 @@ class _ModelCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: installed
-                ? FilledButton.icon(
-                    key: Key('model-use-${model.id}'),
-                    onPressed: onUse,
-                    icon: const Icon(Icons.check_rounded),
-                    label: const Text('使用模型'),
-                  )
-                : progress != null || verifying
-                    ? OutlinedButton.icon(
-                        key: Key('model-cancel-${model.id}'),
-                        onPressed: verifying ? null : onCancel,
-                        icon: const Icon(Icons.pause_rounded),
-                        label: Text(verifying ? '校验中' : '暂停下载'),
-                      )
-                    : FilledButton.icon(
-                        key: Key('model-download-${model.id}'),
-                        onPressed: anotherDownloadActive ? null : onDownload,
-                        icon: const Icon(Icons.download_rounded),
-                        label: Text(
-                          failed != null || cancelled ? '继续下载' : '下载模型',
-                        ),
+          if (model.usesDreamQnn) ...[
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                key: Key('model-use-dream-${model.id}'),
+                onPressed: onUseDream,
+                icon: const Icon(Icons.bolt_rounded),
+                label: const Text('使用 DREAM 加速'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: progress != null || verifying
+                  ? OutlinedButton.icon(
+                      key: Key('model-cancel-${model.id}'),
+                      onPressed: verifying ? null : onCancel,
+                      icon: const Icon(Icons.pause_rounded),
+                      label: Text(verifying ? '安装中' : '暂停独立包下载'),
+                    )
+                  : OutlinedButton.icon(
+                      key: Key('model-download-${model.id}'),
+                      onPressed: installed || anotherDownloadActive
+                          ? null
+                          : onDownload,
+                      icon: Icon(installed
+                          ? Icons.check_rounded
+                          : Icons.download_rounded),
+                      label: Text(
+                        installed
+                            ? '独立 QNN 包已安装'
+                            : failed != null || cancelled
+                                ? '继续下载独立 QNN 包'
+                                : '下载独立 QNN 包（可选）',
                       ),
-          ),
+                    ),
+            ),
+          ] else
+            SizedBox(
+              width: double.infinity,
+              child: installed
+                  ? FilledButton.icon(
+                      key: Key('model-use-${model.id}'),
+                      onPressed: onUse,
+                      icon: const Icon(Icons.check_rounded),
+                      label: const Text('使用 Vulkan 兼容模型'),
+                    )
+                  : progress != null || verifying
+                      ? OutlinedButton.icon(
+                          key: Key('model-cancel-${model.id}'),
+                          onPressed: verifying ? null : onCancel,
+                          icon: const Icon(Icons.pause_rounded),
+                          label: Text(verifying ? '校验中' : '暂停下载'),
+                        )
+                      : FilledButton.icon(
+                          key: Key('model-download-${model.id}'),
+                          onPressed: anotherDownloadActive ? null : onDownload,
+                          icon: const Icon(Icons.download_rounded),
+                          label: Text(
+                            failed != null || cancelled ? '继续下载' : '下载模型',
+                          ),
+                        ),
+            ),
         ],
       ),
     );
   }
 
   static Color _accent(String id) {
+    if (id.contains('illustrious')) return const Color(0xFFDCEAFF);
+    if (id.contains('cyber_realistic')) return const Color(0xFFE6DDFF);
     switch (id) {
       case 'sd15':
         return const Color(0xFFEAE5FF);
