@@ -4,7 +4,8 @@
     <application
         android:label="Portrait Lab"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:networkSecurityConfig="@xml/portrait_network_security_config">
         <uses-native-library
             android:name="libOpenCL.so"
             android:required="false" />
