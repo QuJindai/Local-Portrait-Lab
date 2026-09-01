@@ -34,6 +34,10 @@ if [[ -d "$ROOT_DIR/overlay/test" ]]; then
   mkdir -p "$UPSTREAM_DIR/test"
   cp -a "$ROOT_DIR/overlay/test/." "$UPSTREAM_DIR/test/"
 fi
+if [[ -d "$ROOT_DIR/overlay/android" ]]; then
+  mkdir -p "$UPSTREAM_DIR/android"
+  cp -a "$ROOT_DIR/overlay/android/." "$UPSTREAM_DIR/android/"
+fi
 
 cat > "$BUILD_ROOT/UPSTREAM_LOCK.txt" <<EOF
 url=$UPSTREAM_URL
