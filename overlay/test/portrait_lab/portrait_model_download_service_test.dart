@@ -54,13 +54,16 @@ PortraitModelSpec _fixture({String? expectedSha256}) => PortraitModelSpec(
     );
 
 void main() {
-  test('catalog exposes three curated one-file SafeTensors models with hashes', () {
-    expect(PortraitModelCatalog.curated, hasLength(3));
+  test('catalog exposes four curated one-file SafeTensors models with hashes', () {
+    expect(PortraitModelCatalog.curated, hasLength(4));
     for (final model in PortraitModelCatalog.curated) {
       expect(model.fileName.endsWith('.safetensors'), isTrue);
       expect(model.downloadUrl.startsWith('https://'), isTrue);
       expect(model.expectedSha256, hasLength(64));
     }
+    final fast = PortraitModelCatalog.curated.first;
+    expect(fast.id, 'lcm_dreamshaper7');
+    expect(fast.fastRecommended, isTrue);
   });
 
   test('download resumes an existing .part file and promotes it to final model',
