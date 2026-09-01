@@ -69,8 +69,12 @@ void main() {
     expect(find.text('Stable Diffusion 1.5'), findsOneWidget);
     expect(find.text('DreamShaper 8'), findsOneWidget);
     expect(find.text('Realistic Vision 6'), findsOneWidget);
-    expect(find.text('导入本地模型'), findsOneWidget);
+    expect(find.text('导入本地 SafeTensors / CKPT'), findsOneWidget);
     expect(find.text('LCM DreamShaper 7 · FAST'), findsNothing);
+    expect(
+      find.byKey(const Key('model-use-dream-illustrious_v16_dmd2_qnn')),
+      findsOneWidget,
+    );
 
     await tester.scrollUntilVisible(
       find.byKey(const Key('model-download-sd15')),
