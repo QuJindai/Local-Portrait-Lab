@@ -97,6 +97,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('生成结果'), findsOneWidget);
+    await tester.drag(find.byType(ListView).last, const Offset(0, -520));
+    await tester.pumpAndSettle();
     expect(find.text('result.png'), findsOneWidget);
     expect(find.textContaining('已保存到本地作品'), findsOneWidget);
   });
