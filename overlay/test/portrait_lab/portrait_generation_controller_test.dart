@@ -137,9 +137,14 @@ void main() {
         modelPath: '/models/model.safetensors',
         style: PortraitStyle.japaneseFresh,
       );
+      final cancellationExpectation = expectLater(
+        future,
+        throwsA(isA<PortraitGenerationCancelledException>()),
+      );
+
       await Future<void>.delayed(Duration.zero);
       await controller.cancel();
-      await expectLater(future, throwsA(isA<PortraitGenerationCancelledException>()));
+      await cancellationExpectation;
       await Future<void>.delayed(Duration.zero);
 
       expect(engine.cancelCalled, isTrue);
