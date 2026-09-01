@@ -85,8 +85,9 @@ void main() {
     expect(find.text('选择风格'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('portrait-style-japanese_fresh')));
-    await tester.tap(find.byKey(const Key('portrait-start-generation')));
     await tester.pump();
+    await tester.tap(find.byKey(const Key('portrait-start-generation')));
+    await tester.pumpAndSettle();
 
     expect(find.text('正在本地生成'), findsOneWidget);
     expect(find.text('1 / 4'), findsOneWidget);
