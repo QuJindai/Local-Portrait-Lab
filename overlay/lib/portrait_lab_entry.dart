@@ -9,12 +9,12 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
   FFIBindings.initializeBindings('CPU');
 
-  final controller = PortraitRuntime.createController();
   runApp(
     PortraitLabApp(
-      controller: controller,
+      controller: PortraitRuntime.createController(),
       photoPicker: SystemPortraitPhotoPicker(),
       modelPicker: SystemPortraitModelPicker(),
+      modelDownloader: PortraitRuntime.createModelDownloader(),
     ),
   );
 }

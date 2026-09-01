@@ -25,6 +25,20 @@ if [[ "$actual" != "$UPSTREAM_COMMIT" ]]; then
   exit 21
 fi
 
+progress "declare Portrait Lab checksum dependency"
+python3 - "$UPSTREAM_DIR/pubspec.yaml" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+text = p.read_text(encoding='utf-8')
+if '\n  crypto:' not in text:
+    needle = '  path_provider: ^2.1.5\n'
+    if needle not in text:
+        raise SystemExit('path_provider dependency anchor missing')
+    text = text.replace(needle, needle + '  crypto: ^3.0.6\n', 1)
+p.write_text(text, encoding='utf-8')
+PY
+
 progress "apply portrait overlay"
 if [[ -d "$ROOT_DIR/overlay/lib" ]]; then
   mkdir -p "$UPSTREAM_DIR/lib"

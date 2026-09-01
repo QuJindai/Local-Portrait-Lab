@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../application/portrait_generation_controller.dart';
 import '../domain/portrait_style.dart';
+import '../infrastructure/portrait_model_downloader.dart';
 import 'portrait_input_picker.dart';
+import 'portrait_models_page.dart';
 import 'portrait_style_page.dart';
 
 class PortraitHomePage extends StatefulWidget {
@@ -13,11 +15,13 @@ class PortraitHomePage extends StatefulWidget {
     required this.controller,
     required this.photoPicker,
     required this.modelPicker,
+    this.modelDownloader,
   });
 
   final PortraitGenerationController controller;
   final PortraitPhotoPicker photoPicker;
   final PortraitModelPicker modelPicker;
+  final PortraitModelDownloadService? modelDownloader;
 
   @override
   State<PortraitHomePage> createState() => _PortraitHomePageState();
@@ -36,6 +40,21 @@ class _PortraitHomePageState extends State<PortraitHomePage> {
 
   Future<void> _pickModel() async {
     final path = await widget.modelPicker.pickModel();
+    if (!mounted || path == null || path.trim().isEmpty) return;
+    setState(() => _modelPath = path);
+  }
+
+  Future<void> _openModelStore() async {
+    final downloader = widget.modelDownloader;
+    if (downloader == null) return;
+    final path = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) => PortraitModelsPage(
+          downloader: downloader,
+          customModelPicker: widget.modelPicker,
+        ),
+      ),
+    );
     if (!mounted || path == null || path.trim().isEmpty) return;
     setState(() => _modelPath = path);
   }
@@ -98,6 +117,8 @@ class _PortraitHomePageState extends State<PortraitHomePage> {
             _ModelRow(
               modelPath: _modelPath,
               onPick: _pickModel,
+              onStore: _openModelStore,
+              storeEnabled: widget.modelDownloader != null,
             ),
             const SizedBox(height: 14),
             _PhotoHero(
@@ -106,10 +127,7 @@ class _PortraitHomePageState extends State<PortraitHomePage> {
               onPick: _pickPortrait,
             ),
             const SizedBox(height: 22),
-            const _SectionHeader(
-              title: '热门风格',
-              trailing: '8 种本地预设',
-            ),
+            const _SectionHeader(title: '热门风格', trailing: '8 种本地预设'),
             const SizedBox(height: 12),
             SizedBox(
               height: 112,
@@ -117,10 +135,10 @@ class _PortraitHomePageState extends State<PortraitHomePage> {
                 scrollDirection: Axis.horizontal,
                 itemCount: PortraitStyle.values.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 10),
-                itemBuilder: (context, index) {
-                  final style = PortraitStyle.values[index];
-                  return _StylePreview(style: style, index: index);
-                },
+                itemBuilder: (context, index) => _StylePreview(
+                  style: PortraitStyle.values[index],
+                  index: index,
+                ),
               ),
             ),
             const SizedBox(height: 22),
@@ -171,313 +189,48 @@ class _LocalBadge extends StatelessWidget {
   const _LocalBadge();
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEFEAFF),
-        borderRadius: BorderRadius.circular(99),
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.circle, size: 8, color: Color(0xFF51B96A)),
-          SizedBox(width: 6),
-          Text(
-            '仅本地',
-            style: TextStyle(
-              color: Color(0xFF544A6A),
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PhotoHero extends StatelessWidget {
-  const _PhotoHero({super.key, required this.portraitPath, required this.onPick});
-
-  final String? portraitPath;
-  final VoidCallback onPick;
-
-  @override
-  Widget build(BuildContext context) {
-    final path = portraitPath;
-    return Container(
-      height: 248,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFF0EBFF), Color(0xFFFFF2F8)],
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEFEAFF),
+          borderRadius: BorderRadius.circular(99),
         ),
-        border: Border.all(color: const Color(0xFFE7E1F5)),
-      ),
-      child: path == null
-          ? Stack(
-              children: [
-                const Positioned(
-                  right: -18,
-                  top: -24,
-                  child: _GlowOrb(size: 150, color: Color(0x337A5AF8)),
-                ),
-                const Positioned(
-                  left: -30,
-                  bottom: -48,
-                  child: _GlowOrb(size: 180, color: Color(0x22FF7FAE)),
-                ),
-                Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 72,
-                        height: 72,
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.person_add_alt_1_rounded,
-                          size: 31,
-                          color: _PortraitHomePageState._brand,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      const Text(
-                        '先放一张你的照片',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-                      ),
-                      const SizedBox(height: 5),
-                      const Text(
-                        '建议正脸、单人、光线清晰',
-                        style: TextStyle(color: Color(0xFF7D758A), fontSize: 13),
-                      ),
-                      const SizedBox(height: 14),
-                      FilledButton.tonalIcon(
-                        key: const Key('portrait-pick-photo'),
-                        onPressed: onPick,
-                        icon: const Icon(Icons.add_photo_alternate_outlined),
-                        label: const Text('选择照片'),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            )
-          : Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.file(
-                  File(path),
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: const Color(0xFFEDE8F8),
-                    alignment: Alignment.center,
-                    child: const Icon(Icons.image_outlined, size: 56),
-                  ),
-                ),
-                const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Colors.transparent, Color(0x88000000)],
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: 16,
-                  right: 16,
-                  bottom: 14,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          portraitFileName(path),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      OutlinedButton(
-                        key: const Key('portrait-pick-photo'),
-                        onPressed: onPick,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          side: const BorderSide(color: Color(0x88FFFFFF)),
-                          backgroundColor: const Color(0x33000000),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                        child: const Text('更换'),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-    );
-  }
-}
-
-class _GlowOrb extends StatelessWidget {
-  const _GlowOrb({required this.size, required this.color});
-  final double size;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(shape: BoxShape.circle, color: color),
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, required this.trailing});
-  final String title;
-  final String trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-          ),
-        ),
-        Text(
-          trailing,
-          style: const TextStyle(
-            color: Color(0xFF8B8497),
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _StylePreview extends StatelessWidget {
-  const _StylePreview({required this.style, required this.index});
-  final PortraitStyle style;
-  final int index;
-
-  @override
-  Widget build(BuildContext context) {
-    final spec = style.spec;
-    final gradients = <List<Color>>[
-      [const Color(0xFFFFD7E4), const Color(0xFFF7F0FF)],
-      [const Color(0xFFD9E5FF), const Color(0xFFEDE4FF)],
-      [const Color(0xFFF6E2C8), const Color(0xFFFFF0D9)],
-      [const Color(0xFFE6E7EA), const Color(0xFFF9F9FA)],
-      [const Color(0xFFD8D3E8), const Color(0xFFF0DDE7)],
-      [const Color(0xFFF8DDD0), const Color(0xFFFFF0EB)],
-      [const Color(0xFFE9D9C6), const Color(0xFFF5EEDF)],
-      [const Color(0xFFC9D0FF), const Color(0xFFE8CCFF)],
-    ];
-    final colors = gradients[index % gradients.length];
-    return Container(
-      width: 96,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        gradient: LinearGradient(colors: colors),
-        border: Border.all(color: Colors.white, width: 1.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Align(
-              alignment: Alignment.center,
-              child: Icon(
-                _styleIcon(style),
-                size: 34,
-                color: const Color(0xFF5D5470),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.circle, size: 8, color: Color(0xFF51B96A)),
+            SizedBox(width: 6),
+            Text(
+              '仅本地',
+              style: TextStyle(
+                color: Color(0xFF544A6A),
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
               ),
             ),
-          ),
-          Text(
-            spec.displayName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RatioChip extends StatelessWidget {
-  const _RatioChip({
-    required this.label,
-    this.selected = false,
-    this.enabled = true,
-  });
-
-  final String label;
-  final bool selected;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        height: 48,
-        decoration: BoxDecoration(
-          color: selected
-              ? _PortraitHomePageState._brand
-              : enabled
-                  ? Colors.white
-                  : const Color(0xFFF0EEF4),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: selected ? _PortraitHomePageState._brand : const Color(0xFFE5E1EB),
-          ),
+          ],
         ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected
-                ? Colors.white
-                : enabled
-                    ? const Color(0xFF3A3543)
-                    : const Color(0xFFA7A1AE),
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ),
-    );
-  }
+      );
 }
 
 class _ModelRow extends StatelessWidget {
-  const _ModelRow({required this.modelPath, required this.onPick});
+  const _ModelRow({
+    required this.modelPath,
+    required this.onPick,
+    required this.onStore,
+    required this.storeEnabled,
+  });
+
   final String? modelPath;
   final VoidCallback onPick;
+  final VoidCallback onStore;
+  final bool storeEnabled;
 
   @override
   Widget build(BuildContext context) {
     final selected = modelPath != null;
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 9, 10, 9),
+      padding: const EdgeInsets.fromLTRB(14, 9, 8, 9),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -499,16 +252,25 @@ class _ModelRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('本地模型', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+                const Text(
+                  '本地模型',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+                ),
                 const SizedBox(height: 2),
                 Text(
-                  selected ? portraitFileName(modelPath!) : '选择 Local-Diffusion 模型',
+                  selected ? portraitFileName(modelPath!) : '选择或下载 Local-Diffusion 模型',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Color(0xFF837C8F), fontSize: 11),
                 ),
               ],
             ),
+          ),
+          TextButton(
+            key: const Key('portrait-open-model-store'),
+            onPressed: storeEnabled ? onStore : null,
+            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+            child: const Text('下载'),
           ),
           TextButton(
             key: const Key('portrait-pick-model'),
@@ -520,6 +282,237 @@ class _ModelRow extends StatelessWidget {
       ),
     );
   }
+}
+
+class _PhotoHero extends StatelessWidget {
+  const _PhotoHero({super.key, required this.portraitPath, required this.onPick});
+  final String? portraitPath;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final path = portraitPath;
+    return Container(
+      height: 248,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFF0EBFF), Color(0xFFFFF2F8)],
+        ),
+        border: Border.all(color: const Color(0xFFE7E1F5)),
+      ),
+      child: path == null ? _emptyPhoto() : _selectedPhoto(path),
+    );
+  }
+
+  Widget _emptyPhoto() => Stack(
+        children: [
+          const Positioned(
+            right: -18,
+            top: -24,
+            child: _GlowOrb(size: 150, color: Color(0x337A5AF8)),
+          ),
+          const Positioned(
+            left: -30,
+            bottom: -48,
+            child: _GlowOrb(size: 180, color: Color(0x22FF7FAE)),
+          ),
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                  child: const Icon(
+                    Icons.person_add_alt_1_rounded,
+                    size: 31,
+                    color: _PortraitHomePageState._brand,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text('先放一张你的照片',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 5),
+                const Text('建议正脸、单人、光线清晰',
+                    style: TextStyle(color: Color(0xFF7D758A), fontSize: 13)),
+                const SizedBox(height: 14),
+                FilledButton.tonalIcon(
+                  key: const Key('portrait-pick-photo'),
+                  onPressed: onPick,
+                  icon: const Icon(Icons.add_photo_alternate_outlined),
+                  label: const Text('选择照片'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+
+  Widget _selectedPhoto(String path) => Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.file(
+            File(path),
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              color: const Color(0xFFEDE8F8),
+              alignment: Alignment.center,
+              child: const Icon(Icons.image_outlined, size: 56),
+            ),
+          ),
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.transparent, Color(0x88000000)],
+              ),
+            ),
+          ),
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 14,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    portraitFileName(path),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+                  ),
+                ),
+                OutlinedButton(
+                  key: const Key('portrait-pick-photo'),
+                  onPressed: onPick,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Color(0x88FFFFFF)),
+                    backgroundColor: const Color(0x33000000),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  child: const Text('更换'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+}
+
+class _GlowOrb extends StatelessWidget {
+  const _GlowOrb({required this.size, required this.color});
+  final double size;
+  final Color color;
+  @override
+  Widget build(BuildContext context) => Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+      );
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title, required this.trailing});
+  final String title;
+  final String trailing;
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Expanded(
+            child: Text(title,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+          ),
+          Text(trailing,
+              style: const TextStyle(
+                  color: Color(0xFF8B8497), fontSize: 12, fontWeight: FontWeight.w600)),
+        ],
+      );
+}
+
+class _StylePreview extends StatelessWidget {
+  const _StylePreview({required this.style, required this.index});
+  final PortraitStyle style;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    const gradients = <List<Color>>[
+      [Color(0xFFFFD7E4), Color(0xFFF7F0FF)],
+      [Color(0xFFD9E5FF), Color(0xFFEDE4FF)],
+      [Color(0xFFF6E2C8), Color(0xFFFFF0D9)],
+      [Color(0xFFE6E7EA), Color(0xFFF9F9FA)],
+      [Color(0xFFD8D3E8), Color(0xFFF0DDE7)],
+      [Color(0xFFF8DDD0), Color(0xFFFFF0EB)],
+      [Color(0xFFE9D9C6), Color(0xFFF5EEDF)],
+      [Color(0xFFC9D0FF), Color(0xFFE8CCFF)],
+    ];
+    return Container(
+      width: 96,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: LinearGradient(colors: gradients[index % gradients.length]),
+        border: Border.all(color: Colors.white, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Center(child: Icon(_styleIcon(style), size: 34, color: const Color(0xFF5D5470))),
+          ),
+          Text(
+            style.spec.displayName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RatioChip extends StatelessWidget {
+  const _RatioChip({required this.label, this.selected = false, this.enabled = true});
+  final String label;
+  final bool selected;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+        child: Container(
+          height: 48,
+          decoration: BoxDecoration(
+            color: selected
+                ? _PortraitHomePageState._brand
+                : enabled
+                    ? Colors.white
+                    : const Color(0xFFF0EEF4),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+                color: selected ? _PortraitHomePageState._brand : const Color(0xFFE5E1EB)),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected
+                  ? Colors.white
+                  : enabled
+                      ? const Color(0xFF3A3543)
+                      : const Color(0xFFA7A1AE),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      );
 }
 
 IconData _styleIcon(PortraitStyle style) {
