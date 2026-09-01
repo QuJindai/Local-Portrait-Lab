@@ -30,7 +30,7 @@ class FakeUpstreamImg2ImgSession implements UpstreamImg2ImgSession {
   @override
   Future<void> dispose() async {
     disposed = true;
-    if (!_heldResult.isCompleted) {
+    if (hold && !_heldResult.isCompleted) {
       _heldResult.completeError(StateError('native session disposed'));
     }
   }
