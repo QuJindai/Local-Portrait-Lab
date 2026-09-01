@@ -1,3 +1,8 @@
+enum PortraitModelBackend {
+  stableDiffusionCpp,
+  dreamQnnSdxl,
+}
+
 class PortraitModelSpec {
   const PortraitModelSpec({
     required this.id,
@@ -11,6 +16,9 @@ class PortraitModelSpec {
     required this.downloadUrl,
     required this.expectedSha256,
     this.fastRecommended = false,
+    this.backend = PortraitModelBackend.stableDiffusionCpp,
+    this.isArchive = false,
+    this.generationSize = 512,
   });
 
   final String id;
@@ -24,6 +32,11 @@ class PortraitModelSpec {
   final String downloadUrl;
   final String expectedSha256;
   final bool fastRecommended;
+  final PortraitModelBackend backend;
+  final bool isArchive;
+  final int generationSize;
+
+  bool get usesDreamQnn => backend == PortraitModelBackend.dreamQnnSdxl;
 }
 
 class PortraitModelCatalog {
@@ -31,24 +44,44 @@ class PortraitModelCatalog {
 
   static const curated = <PortraitModelSpec>[
     PortraitModelSpec(
-      id: 'lcm_dreamshaper7',
-      displayName: 'LCM DreamShaper 7 · FAST',
-      description: '极速推荐 · LCM 6 步 / CFG 1.0，优先用于当前兼容后端的快速人像验证。',
-      sourceLabel: 'Hugging Face · Runware/lcm-dreamshaper-v7',
-      licenseLabel: 'See model card',
-      format: 'SafeTensors',
-      sizeLabel: '3.44 GB',
-      fileName: 'LCM_Dreamshaper_v7_4k.safetensors',
+      id: 'illustrious_v16_dmd2_qnn',
+      displayName: 'Illustrious v16 DMD2',
+      description: 'DREAM 同源极速模型 · SDXL/QNN/HTP · 1024×1024 · DMD2。下载约 3.72 GB，解压约 4.2 GB。',
+      sourceLabel: 'Hugging Face · xororz/sdxl-qnn',
+      licenseLabel: 'Model package · see upstream model card',
+      format: 'QNN SDXL ZIP',
+      sizeLabel: '3.72 GB ZIP',
+      fileName: 'illustrious_v16_dmd2_qnn2.28_8gen3.zip',
       downloadUrl:
-          'https://huggingface.co/Runware/lcm-dreamshaper-v7/resolve/main/LCM_Dreamshaper_v7_4k.safetensors?download=true',
-      expectedSha256:
-          '84feab3a32f1d36108b762b25dad483ca9e37f719b23e0cfd0fdc4ad3fd5409b',
+          'https://huggingface.co/xororz/sdxl-qnn/resolve/main/illustrious_v16_dmd2_qnn2.28_8gen3.zip?download=true',
+      expectedSha256: '',
       fastRecommended: true,
+      backend: PortraitModelBackend.dreamQnnSdxl,
+      isArchive: true,
+      generationSize: 1024,
+    ),
+    PortraitModelSpec(
+      id: 'cyber_realistic_v10_dmd2_qnn',
+      displayName: 'CyberRealistic v10 DMD2',
+      description: 'DREAM 同源写实极速模型 · SDXL/QNN/HTP · 1024×1024 · DMD2。下载约 3.75 GB，解压约 4.2 GB。',
+      sourceLabel: 'Hugging Face · xororz/sdxl-qnn',
+      licenseLabel: 'Model package · see upstream model card',
+      format: 'QNN SDXL ZIP',
+      sizeLabel: '3.75 GB ZIP',
+      fileName: 'cyber_realistic_v10_dmd2_qnn2.28_8gen3.zip',
+      downloadUrl:
+          'https://huggingface.co/xororz/sdxl-qnn/resolve/main/cyber_realistic_v10_dmd2_qnn2.28_8gen3.zip?download=true',
+      expectedSha256:
+          '1c6a9647666e276ca262bf96328234536a07261567bf4eb572b50d1edb0987af',
+      fastRecommended: true,
+      backend: PortraitModelBackend.dreamQnnSdxl,
+      isArchive: true,
+      generationSize: 1024,
     ),
     PortraitModelSpec(
       id: 'sd15',
       displayName: 'Stable Diffusion 1.5',
-      description: '官方基础模型 · 兼容性优先，适合作为本地推理基线。',
+      description: '兼容后端基础模型 · CPU/Vulkan fallback。',
       sourceLabel: 'Hugging Face · stable-diffusion-v1-5',
       licenseLabel: 'CreativeML Open RAIL-M',
       format: 'SafeTensors',
@@ -62,7 +95,7 @@ class PortraitModelCatalog {
     PortraitModelSpec(
       id: 'dreamshaper8',
       displayName: 'DreamShaper 8',
-      description: '通用人像与插画 · 约 2.13 GB，标准采样用于质量/兼容性对照。',
+      description: '兼容后端通用人像与插画模型，用于 fallback/对照。',
       sourceLabel: 'Hugging Face · casque/dreamshaper_8',
       licenseLabel: 'CreativeML Open RAIL-M',
       format: 'SafeTensors',
@@ -76,7 +109,7 @@ class PortraitModelCatalog {
     PortraitModelSpec(
       id: 'realisticvision6',
       displayName: 'Realistic Vision 6',
-      description: '写实人像方向 · 约 2.13 GB，优先用于真人照片质量对照。',
+      description: '兼容后端写实人像模型，用于 fallback/对照。',
       sourceLabel: 'Hugging Face · visible-tactics',
       licenseLabel: 'CreativeML Open RAIL-M',
       format: 'SafeTensors',
