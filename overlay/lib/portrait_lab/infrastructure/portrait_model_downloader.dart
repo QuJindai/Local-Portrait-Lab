@@ -1,10 +1,25 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
+import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../domain/portrait_model.dart';
+
+const _requiredQnnSdxlFiles = <String>[
+  'tokenizer.json',
+  'clip.mnn',
+  'pos_emb.bin',
+  'token_emb.bin',
+  'clip_2.mnn',
+  'pos_emb_2.bin',
+  'token_emb_2.bin',
+  'unet.bin',
+  'vae_encoder.bin',
+  'vae_decoder.bin',
+];
 
 sealed class PortraitModelDownloadState {
   const PortraitModelDownloadState(this.model);
@@ -80,7 +95,7 @@ class DartIoPortraitDownloadHttpClient implements PortraitDownloadHttpClient {
       request.followRedirects = false;
       request.headers.set(
         HttpHeaders.userAgentHeader,
-        'PortraitLab/0.3 Android Local-Diffusion',
+        'PortraitLab/0.6 Android Local-Diffusion',
       );
       if (startAt > 0) {
         request.headers.set(HttpHeaders.rangeHeader, 'bytes=$startAt-');
@@ -90,7 +105,10 @@ class DartIoPortraitDownloadHttpClient implements PortraitDownloadHttpClient {
         final location = response.headers.value(HttpHeaders.locationHeader);
         await response.drain<void>();
         if (location == null || location.isEmpty) {
-          throw HttpException('Redirect response has no Location header.', uri: current);
+          throw HttpException(
+            'Redirect response has no Location header.',
+            uri: current,
+          );
         }
         current = current.resolve(location);
         continue;
@@ -156,8 +174,15 @@ class NativePortraitModelDownloadService implements PortraitModelDownloadService
   @override
   Future<String?> installedPath(PortraitModelSpec model) async {
     final directory = await _modelsDirectory();
+    if (model.isArchive) {
+      final modelDir = Directory('${directory.path}/${model.id}');
+      return await _qnnModelDirectoryLooksComplete(modelDir)
+          ? modelDir.path
+          : null;
+    }
+
     final file = File('${directory.path}/${model.fileName}');
-    return await file.exists() ? file.path : null;
+    return await file.exists() && await file.length() > 0 ? file.path : null;
   }
 
   @override
@@ -178,93 +203,123 @@ class NativePortraitModelDownloadService implements PortraitModelDownloadService
 
     try {
       final directory = await _modelsDirectory();
+      final alreadyInstalled = await installedPath(model);
+      if (alreadyInstalled != null) {
+        yield PortraitModelDownloadCompleted(model, alreadyInstalled);
+        return;
+      }
+
       final finalFile = File('${directory.path}/${model.fileName}');
-      if (await finalFile.exists()) {
-        yield PortraitModelDownloadCompleted(model, finalFile.path);
-        return;
-      }
-
       final partFile = File('${finalFile.path}.part');
-      final existing = await partFile.exists() ? await partFile.length() : 0;
-      received = existing;
+      final downloadedArchive = File('${finalFile.path}.downloaded');
 
-      client = _httpClientFactory();
-      _activeClient = client;
-      final response = await client.get(
-        Uri.parse(model.downloadUrl),
-        startAt: existing,
-      );
+      File payloadFile;
+      if (model.isArchive && await downloadedArchive.exists()) {
+        payloadFile = downloadedArchive;
+      } else {
+        final existing = await partFile.exists() ? await partFile.length() : 0;
+        received = existing;
 
-      var append = existing > 0 && response.statusCode == HttpStatus.partialContent;
-      if (existing > 0 && response.statusCode == HttpStatus.ok) {
-        append = false;
-        received = 0;
-      }
-      if (response.statusCode != HttpStatus.ok &&
-          response.statusCode != HttpStatus.partialContent) {
-        yield PortraitModelDownloadFailed(
-          model,
-          '下载服务器返回 HTTP ${response.statusCode}。',
+        client = _httpClientFactory();
+        _activeClient = client;
+        final response = await client.get(
+          Uri.parse(model.downloadUrl),
+          startAt: existing,
         );
-        return;
-      }
 
-      final total = response.contentLength > 0
-          ? received + response.contentLength
-          : 0;
-      final outputSink =
-          partFile.openWrite(mode: append ? FileMode.append : FileMode.write);
-      cleanupSink = outputSink;
-
-      if (received > 0) {
-        yield PortraitModelDownloadProgress(
-          model,
-          receivedBytes: received,
-          totalBytes: total,
-        );
-      }
-
-      await for (final chunk in response.bytes) {
-        if (_cancelRequested) {
-          await outputSink.flush();
-          await outputSink.close();
-          cleanupSink = null;
-          yield PortraitModelDownloadCancelled(
+        var append =
+            existing > 0 && response.statusCode == HttpStatus.partialContent;
+        if (existing > 0 && response.statusCode == HttpStatus.ok) {
+          append = false;
+          received = 0;
+        }
+        if (response.statusCode != HttpStatus.ok &&
+            response.statusCode != HttpStatus.partialContent) {
+          yield PortraitModelDownloadFailed(
             model,
-            partialBytes: received,
+            '下载服务器返回 HTTP ${response.statusCode}。',
           );
           return;
         }
-        outputSink.add(chunk);
-        received += chunk.length;
-        yield PortraitModelDownloadProgress(
-          model,
-          receivedBytes: received,
-          totalBytes: total,
-        );
-      }
 
-      await outputSink.flush();
-      await outputSink.close();
-      cleanupSink = null;
+        final total = response.contentLength > 0
+            ? received + response.contentLength
+            : 0;
+        final outputSink =
+            partFile.openWrite(mode: append ? FileMode.append : FileMode.write);
+        cleanupSink = outputSink;
 
-      if (_cancelRequested) {
-        yield PortraitModelDownloadCancelled(model, partialBytes: received);
-        return;
+        if (received > 0) {
+          yield PortraitModelDownloadProgress(
+            model,
+            receivedBytes: received,
+            totalBytes: total,
+          );
+        }
+
+        await for (final chunk in response.bytes) {
+          if (_cancelRequested) {
+            await outputSink.flush();
+            await outputSink.close();
+            cleanupSink = null;
+            yield PortraitModelDownloadCancelled(
+              model,
+              partialBytes: received,
+            );
+            return;
+          }
+          outputSink.add(chunk);
+          received += chunk.length;
+          yield PortraitModelDownloadProgress(
+            model,
+            receivedBytes: received,
+            totalBytes: total,
+          );
+        }
+
+        await outputSink.flush();
+        await outputSink.close();
+        cleanupSink = null;
+
+        if (_cancelRequested) {
+          yield PortraitModelDownloadCancelled(model, partialBytes: received);
+          return;
+        }
+        payloadFile = partFile;
       }
 
       yield PortraitModelDownloadVerifying(model);
       if (model.expectedSha256.isNotEmpty) {
-        final digest = await sha256.bind(partFile.openRead()).first;
+        final digest = await sha256.bind(payloadFile.openRead()).first;
         final actual = digest.toString().toLowerCase();
         if (actual != model.expectedSha256.toLowerCase()) {
-          await partFile.delete();
+          if (await payloadFile.exists()) await payloadFile.delete();
           yield PortraitModelDownloadFailed(
             model,
             'SHA-256 校验失败。已删除损坏文件，请重新下载。',
           );
           return;
         }
+      }
+
+      if (model.isArchive) {
+        if (payloadFile.path == partFile.path) {
+          if (await downloadedArchive.exists()) {
+            await downloadedArchive.delete();
+          }
+          payloadFile = await partFile.rename(downloadedArchive.path);
+        }
+
+        final installed = await Isolate.run(
+          () => _extractAndValidateQnnSdxlArchive(
+            payloadFile.path,
+            directory.path,
+            model.id,
+          ),
+        );
+        if (await payloadFile.exists()) await payloadFile.delete();
+        yield PortraitModelDownloadCompleted(model, installed);
+        return;
       }
 
       if (await finalFile.exists()) {
@@ -301,9 +356,12 @@ class NativePortraitModelDownloadService implements PortraitModelDownloadService
       return '下载失败：${error.message}';
     }
     if (error is FileSystemException) {
-      return '文件写入失败：${error.message}';
+      return '文件写入/解压失败：${error.message}';
     }
-    return '下载失败：$error';
+    if (error is FormatException) {
+      return '模型包格式无效：${error.message}';
+    }
+    return '下载/安装失败：$error';
   }
 
   @override
@@ -312,4 +370,107 @@ class NativePortraitModelDownloadService implements PortraitModelDownloadService
     _cancelRequested = true;
     _activeClient?.close(force: true);
   }
+}
+
+Future<bool> _qnnModelDirectoryLooksComplete(Directory directory) async {
+  if (!await directory.exists()) return false;
+  for (final name in _requiredQnnSdxlFiles) {
+    final file = File('${directory.path}/$name');
+    if (!await file.exists() || await file.length() == 0) return false;
+  }
+  return true;
+}
+
+String _extractAndValidateQnnSdxlArchive(
+  String archivePath,
+  String modelsDirectoryPath,
+  String modelId,
+) {
+  final staging = Directory('$modelsDirectoryPath/$modelId.installing');
+  final finalDirectory = Directory('$modelsDirectoryPath/$modelId');
+  if (staging.existsSync()) staging.deleteSync(recursive: true);
+  staging.createSync(recursive: true);
+
+  final input = InputFileStream(archivePath);
+  try {
+    final archive = ZipDecoder().decodeStream(input);
+    for (final entity in archive) {
+      if (entity.isSymbolicLink) {
+        throw const FormatException('QNN model archive may not contain links.');
+      }
+      final relativePath = _safeArchiveRelativePath(entity.name);
+      if (relativePath == null) continue;
+      final outputPath = '${staging.path}/$relativePath';
+      if (entity.isFile) {
+        File(outputPath).parent.createSync(recursive: true);
+        final output = OutputFileStream(outputPath);
+        try {
+          entity.writeContent(output);
+        } finally {
+          output.closeSync();
+        }
+      } else {
+        Directory(outputPath).createSync(recursive: true);
+      }
+    }
+  } finally {
+    input.closeSync();
+  }
+
+  final modelRoot = _findQnnSdxlRoot(staging);
+  if (modelRoot == null) {
+    staging.deleteSync(recursive: true);
+    throw FormatException(
+      'QNN SDXL 模型包缺少必需文件：${_requiredQnnSdxlFiles.join(', ')}',
+    );
+  }
+
+  if (finalDirectory.existsSync()) finalDirectory.deleteSync(recursive: true);
+  if (modelRoot.path == staging.path) {
+    staging.renameSync(finalDirectory.path);
+  } else {
+    modelRoot.renameSync(finalDirectory.path);
+    if (staging.existsSync()) staging.deleteSync(recursive: true);
+  }
+  return finalDirectory.path;
+}
+
+String? _safeArchiveRelativePath(String rawName) {
+  if (rawName.isEmpty) return null;
+  final normalized = rawName.replaceAll('\\', '/');
+  if (normalized.startsWith('/') || RegExp(r'^[A-Za-z]:').hasMatch(normalized)) {
+    throw const FormatException('Archive contains an absolute path.');
+  }
+  final parts = <String>[];
+  for (final part in normalized.split('/')) {
+    if (part.isEmpty || part == '.') continue;
+    if (part == '..') {
+      throw const FormatException('Archive contains a parent path traversal.');
+    }
+    parts.add(part);
+  }
+  if (parts.isEmpty || parts.first == '__MACOSX') return null;
+  return parts.join('/');
+}
+
+Directory? _findQnnSdxlRoot(Directory staging) {
+  final candidates = <Directory>{staging};
+  for (final entity in staging.listSync(recursive: true, followLinks: false)) {
+    if (entity is File && entity.path.endsWith('/unet.bin')) {
+      candidates.add(entity.parent);
+    }
+  }
+
+  for (final directory in candidates) {
+    var complete = true;
+    for (final name in _requiredQnnSdxlFiles) {
+      final file = File('${directory.path}/$name');
+      if (!file.existsSync() || file.lengthSync() == 0) {
+        complete = false;
+        break;
+      }
+    }
+    if (complete) return directory;
+  }
+  return null;
 }
