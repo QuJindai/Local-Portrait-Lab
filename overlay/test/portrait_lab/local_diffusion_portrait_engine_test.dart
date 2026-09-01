@@ -17,8 +17,8 @@ class FakeLocalDiffusionImg2ImgBridge implements LocalDiffusionImg2ImgBridge {
         onProgress,
   }) async {
     lastCommand = command;
-    onProgress(1, 4, 0.25);
-    onProgress(4, 4, 1.0);
+    onProgress(1, command.sampleSteps, 0.25);
+    onProgress(command.sampleSteps, command.sampleSteps, 1.0);
     return outputPath;
   }
 
@@ -29,7 +29,7 @@ class FakeLocalDiffusionImg2ImgBridge implements LocalDiffusionImg2ImgBridge {
 }
 
 void main() {
-  test('maps portrait request into Local-Diffusion img2img command', () async {
+  test('maps standard portrait request into Local-Diffusion img2img command', () async {
     final request = PortraitGenerationRequest.fromStyle(
       portraitPath: '/tmp/person.jpg',
       modelPath: '/models/portrait.safetensors',
@@ -58,10 +58,27 @@ void main() {
       states,
       containsAllInOrder(<PortraitGenerationState>[
         const PortraitGenerationState.loadingModel(),
-        const PortraitGenerationState.sampling(step: 1, steps: 4),
-        const PortraitGenerationState.sampling(step: 4, steps: 4),
+        PortraitGenerationState.sampling(step: 1, steps: request.steps),
+        PortraitGenerationState.sampling(step: request.steps, steps: request.steps),
       ]),
     );
+  });
+
+  test('LCM checkpoint maps to six-step CFG1 LCM native command', () async {
+    final request = PortraitGenerationRequest.fromStyle(
+      portraitPath: '/tmp/person.jpg',
+      modelPath: '/models/LCM_Dreamshaper_v7_4k.safetensors',
+      style: PortraitStyle.japaneseFresh,
+    );
+    final bridge = FakeLocalDiffusionImg2ImgBridge();
+    final engine = LocalDiffusionPortraitEngine(bridge);
+
+    await engine.generate(request, onState: (_) {});
+
+    expect(bridge.lastCommand!.sampleMethodIndex, 9);
+    expect(bridge.lastCommand!.sampleSteps, 6);
+    expect(bridge.lastCommand!.cfgScale, 1.0);
+    expect(bridge.lastCommand!.strength, request.strength);
   });
 
   test('cancel delegates to the active Local-Diffusion bridge', () async {
