@@ -19,6 +19,7 @@ class PortraitModelSpec {
     this.backend = PortraitModelBackend.stableDiffusionCpp,
     this.isArchive = false,
     this.generationSize = 512,
+    this.dreamModelId,
   });
 
   final String id;
@@ -35,8 +36,11 @@ class PortraitModelSpec {
   final PortraitModelBackend backend;
   final bool isArchive;
   final int generationSize;
+  final String? dreamModelId;
 
   bool get usesDreamQnn => backend == PortraitModelBackend.dreamQnnSdxl;
+  String? get dreamSelectionUri =>
+      dreamModelId == null ? null : 'dream://${dreamModelId!}';
 }
 
 class PortraitModelCatalog {
@@ -46,7 +50,7 @@ class PortraitModelCatalog {
     PortraitModelSpec(
       id: 'illustrious_v16_dmd2_qnn',
       displayName: 'Illustrious v16 DMD2',
-      description: 'DREAM 同源极速模型 · SDXL/QNN/HTP · 1024×1024 · DMD2。下载约 3.72 GB，解压约 4.2 GB。',
+      description: 'DREAM 同源极速模型 · SDXL/QNN/HTP · 1024×1024 · DMD2。DREAM 已下载时可直接复用，无需重复占用 4GB。',
       sourceLabel: 'Hugging Face · xororz/sdxl-qnn',
       licenseLabel: 'Model package · see upstream model card',
       format: 'QNN SDXL ZIP',
@@ -59,11 +63,12 @@ class PortraitModelCatalog {
       backend: PortraitModelBackend.dreamQnnSdxl,
       isArchive: true,
       generationSize: 1024,
+      dreamModelId: 'illustrious_v16_dmd2',
     ),
     PortraitModelSpec(
       id: 'cyber_realistic_v10_dmd2_qnn',
       displayName: 'CyberRealistic v10 DMD2',
-      description: 'DREAM 同源写实极速模型 · SDXL/QNN/HTP · 1024×1024 · DMD2。下载约 3.75 GB，解压约 4.2 GB。',
+      description: 'DREAM 同源写实极速模型 · SDXL/QNN/HTP · 1024×1024 · DMD2。DREAM 已下载时可直接复用。',
       sourceLabel: 'Hugging Face · xororz/sdxl-qnn',
       licenseLabel: 'Model package · see upstream model card',
       format: 'QNN SDXL ZIP',
@@ -77,6 +82,7 @@ class PortraitModelCatalog {
       backend: PortraitModelBackend.dreamQnnSdxl,
       isArchive: true,
       generationSize: 1024,
+      dreamModelId: 'cyber_realistic_v10_dmd2',
     ),
     PortraitModelSpec(
       id: 'sd15',
