@@ -17,6 +17,7 @@ class FakePortraitEngine implements PortraitGenerationEngine {
   void Function(PortraitGenerationState state)? _onState;
   final Completer<void> _release = Completer<void>();
   bool hold = false;
+  Object? errorAfterRelease;
 
   @override
   Future<String> generate(
@@ -30,6 +31,9 @@ class FakePortraitEngine implements PortraitGenerationEngine {
     onState(const PortraitGenerationState.sampling(step: 1, steps: 4));
     if (hold) {
       await _release.future;
+    }
+    if (errorAfterRelease != null) {
+      throw errorAfterRelease!;
     }
     onState(const PortraitGenerationState.sampling(step: 4, steps: 4));
     return resultPath;
@@ -154,6 +158,29 @@ void main() {
         isEmpty,
       );
       await subscription.cancel();
+      await controller.dispose();
+    });
+
+    test('cancel normalizes a native failure raised while teardown releases generation',
+        () async {
+      final engine = FakePortraitEngine()
+        ..hold = true
+        ..errorAfterRelease = StateError('native isolate terminated');
+      final controller = PortraitGenerationController(engine);
+
+      final future = controller.generate(
+        portraitPath: '/tmp/person.jpg',
+        modelPath: '/models/model.safetensors',
+        style: PortraitStyle.japaneseFresh,
+      );
+      final cancellationExpectation = expectLater(
+        future,
+        throwsA(isA<PortraitGenerationCancelledException>()),
+      );
+
+      await Future<void>.delayed(Duration.zero);
+      await controller.cancel();
+      await cancellationExpectation;
       await controller.dispose();
     });
   });
