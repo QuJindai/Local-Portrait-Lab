@@ -6,15 +6,23 @@ import 'package:local_diffusion/portrait_lab/infrastructure/native_local_diffusi
 
 class FakeNativePortraitDecoder implements NativePortraitDecoder {
   String? lastPath;
+  int? lastTargetWidth;
+  int? lastTargetHeight;
   DecodedNativePortrait decoded = DecodedNativePortrait(
-    rgbBytes: Uint8List.fromList(<int>[1, 2, 3, 4, 5, 6]),
-    width: 2,
-    height: 1,
+    rgbBytes: Uint8List(512 * 768 * 3),
+    width: 512,
+    height: 768,
   );
 
   @override
-  Future<DecodedNativePortrait> decode(String portraitPath) async {
+  Future<DecodedNativePortrait> decode(
+    String portraitPath, {
+    int? targetWidth,
+    int? targetHeight,
+  }) async {
     lastPath = portraitPath;
+    lastTargetWidth = targetWidth;
+    lastTargetHeight = targetHeight;
     return decoded;
   }
 }
@@ -54,7 +62,7 @@ class FakeNativePortraitOutputStore implements NativePortraitOutputStore {
 }
 
 void main() {
-  test('decodes source, runs native img2img, stores PNG and forwards progress',
+  test('decodes source at output size, runs native img2img, stores PNG and forwards progress',
       () async {
     final decoder = FakeNativePortraitDecoder();
     final generator = FakeNativeImg2ImgGenerator();
@@ -88,10 +96,12 @@ void main() {
 
     expect(output, '/private/portrait-lab/result.png');
     expect(decoder.lastPath, '/photos/me.jpg');
+    expect(decoder.lastTargetWidth, 512);
+    expect(decoder.lastTargetHeight, 768);
     expect(generator.lastRequest, isNotNull);
     expect(generator.lastRequest!.rgbBytes, decoder.decoded.rgbBytes);
-    expect(generator.lastRequest!.inputWidth, 2);
-    expect(generator.lastRequest!.inputHeight, 1);
+    expect(generator.lastRequest!.inputWidth, 512);
+    expect(generator.lastRequest!.inputHeight, 768);
     expect(generator.lastRequest!.channels, 3);
     expect(generator.lastRequest!.modelPath, command.modelPath);
     expect(generator.lastRequest!.prompt, command.prompt);
