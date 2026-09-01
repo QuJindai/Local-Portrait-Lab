@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../application/portrait_generation_controller.dart';
 import '../domain/portrait_style.dart';
+import '../infrastructure/portrait_compute_backend.dart';
 import '../infrastructure/portrait_model_downloader.dart';
 import 'portrait_input_picker.dart';
 import 'portrait_models_page.dart';
@@ -189,28 +190,37 @@ class _LocalBadge extends StatelessWidget {
   const _LocalBadge();
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: const Color(0xFFEFEAFF),
-          borderRadius: BorderRadius.circular(99),
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.circle, size: 8, color: Color(0xFF51B96A)),
-            SizedBox(width: 6),
-            Text(
-              '仅本地',
-              style: TextStyle(
-                color: Color(0xFF544A6A),
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
-              ),
+  Widget build(BuildContext context) {
+    final backend = PortraitComputeBackendRegistry.current;
+    final accelerated = backend.isGpuAccelerated;
+    return Container(
+      key: const Key('portrait-compute-backend-badge'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: accelerated ? const Color(0xFFE8F2FF) : const Color(0xFFFFF1DA),
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            accelerated ? Icons.memory_rounded : Icons.warning_amber_rounded,
+            size: 13,
+            color: accelerated ? const Color(0xFF3478F6) : const Color(0xFFB77818),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            backend.displayLabel,
+            style: TextStyle(
+              color: accelerated ? const Color(0xFF2E5EAA) : const Color(0xFF875B1F),
+              fontWeight: FontWeight.w800,
+              fontSize: 11,
             ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ModelRow extends StatelessWidget {
