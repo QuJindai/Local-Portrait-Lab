@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 
+import '../../image_processing_utils.dart';
 import 'native_local_diffusion_img2img_bridge.dart';
 
 class NativePortraitDecodeException implements Exception {
@@ -17,10 +18,25 @@ class NativePortraitDecodeException implements Exception {
 
 class ImagePackageNativePortraitDecoder implements NativePortraitDecoder {
   @override
-  Future<DecodedNativePortrait> decode(String portraitPath) async {
+  Future<DecodedNativePortrait> decode(
+    String portraitPath, {
+    int? targetWidth,
+    int? targetHeight,
+  }) async {
     final path = portraitPath.trim();
     if (path.isEmpty) {
       throw const NativePortraitDecodeException('Portrait path is empty.');
+    }
+    if ((targetWidth == null) != (targetHeight == null)) {
+      throw const NativePortraitDecodeException(
+        'Target width and height must be provided together.',
+      );
+    }
+    if ((targetWidth != null && targetWidth <= 0) ||
+        (targetHeight != null && targetHeight <= 0)) {
+      throw const NativePortraitDecodeException(
+        'Target dimensions must be positive.',
+      );
     }
 
     final file = File(path);
@@ -41,9 +57,27 @@ class ImagePackageNativePortraitDecoder implements NativePortraitDecoder {
     }
 
     final oriented = img.bakeOrientation(decoded);
-    final rgb = oriented.getBytes(order: img.ChannelOrder.rgb);
+    final rgb = Uint8List.fromList(
+      oriented.getBytes(order: img.ChannelOrder.rgb),
+    );
+
+    if (targetWidth != null && targetHeight != null) {
+      final processed = cropImage(
+        rgb,
+        oriented.width,
+        oriented.height,
+        targetWidth,
+        targetHeight,
+      );
+      return DecodedNativePortrait(
+        rgbBytes: processed.bytes,
+        width: processed.width,
+        height: processed.height,
+      );
+    }
+
     return DecodedNativePortrait(
-      rgbBytes: Uint8List.fromList(rgb),
+      rgbBytes: rgb,
       width: oriented.width,
       height: oriented.height,
     );
@@ -74,8 +108,7 @@ class FileNativePortraitOutputStore implements NativePortraitOutputStore {
     final historyDirectory = Directory('${root.path}/portrait_lab/history');
     await historyDirectory.create(recursive: true);
 
-    final path =
-        '${historyDirectory.path}/portrait_${_clockMillis()}.png';
+    final path = '${historyDirectory.path}/portrait_${_clockMillis()}.png';
     final file = File(path);
     await file.writeAsBytes(pngBytes, flush: true);
     return file.path;
