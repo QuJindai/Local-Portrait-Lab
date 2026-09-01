@@ -15,7 +15,11 @@ class DecodedNativePortrait {
 }
 
 abstract interface class NativePortraitDecoder {
-  Future<DecodedNativePortrait> decode(String portraitPath);
+  Future<DecodedNativePortrait> decode(
+    String portraitPath, {
+    int? targetWidth,
+    int? targetHeight,
+  });
 }
 
 class NativeImg2ImgRequest {
@@ -85,7 +89,26 @@ class NativeLocalDiffusionImg2ImgBridge implements LocalDiffusionImg2ImgBridge {
     required void Function(int step, int steps, double elapsedSeconds)
         onProgress,
   }) async {
-    final portrait = await _decoder.decode(command.portraitPath);
+    final portrait = await _decoder.decode(
+      command.portraitPath,
+      targetWidth: command.outputWidth,
+      targetHeight: command.outputHeight,
+    );
+    if (portrait.width != command.outputWidth ||
+        portrait.height != command.outputHeight) {
+      throw StateError(
+        'Portrait preprocessing returned ${portrait.width}x${portrait.height}; '
+        'expected ${command.outputWidth}x${command.outputHeight}.',
+      );
+    }
+    final expectedRgbBytes = portrait.width * portrait.height * 3;
+    if (portrait.rgbBytes.length != expectedRgbBytes) {
+      throw StateError(
+        'Portrait RGB byte count ${portrait.rgbBytes.length} does not match '
+        '${portrait.width}x${portrait.height}x3 ($expectedRgbBytes).',
+      );
+    }
+
     final request = NativeImg2ImgRequest(
       rgbBytes: portrait.rgbBytes,
       inputWidth: portrait.width,
