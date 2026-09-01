@@ -31,6 +31,9 @@ jobs:
       - name: Bootstrap locked Local-Diffusion upstream
         run: bash scripts/bootstrap_upstream.sh
 
+      - name: Verify Portrait Lab Android identity and storage policy
+        run: bash scripts/verify_portrait_android.sh _build/local-diffusion
+
       - name: Resolve Flutter packages
         working-directory: _build/local-diffusion
         run: flutter pub get
