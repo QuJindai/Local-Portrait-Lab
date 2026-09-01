@@ -16,7 +16,7 @@ permissions:
 jobs:
   portrait-domain:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,7 +38,7 @@ jobs:
         working-directory: _build/local-diffusion
         run: flutter pub get
 
-      - name: Verify portrait domain tests
+      - name: Verify portrait domain and flow tests
         working-directory: _build/local-diffusion
         shell: bash
         run: |
@@ -47,3 +47,25 @@ jobs:
           else
             echo "No portrait tests committed yet; bootstrap baseline only."
           fi
+
+      - name: Build Portrait Lab debug APK
+        working-directory: _build/local-diffusion
+        run: flutter build apk --debug --target lib/portrait_lab_entry.dart
+
+      - name: Stage APK
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp _build/local-diffusion/build/app/outputs/flutter-apk/app-debug.apk \
+            dist/Local-Portrait-Lab_R1_debug.apk
+          sha256sum dist/Local-Portrait-Lab_R1_debug.apk | tee dist/Local-Portrait-Lab_R1_debug.sha256
+
+      - name: Upload Portrait Lab APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Local-Portrait-Lab_R1_debug
+          path: |
+            dist/Local-Portrait-Lab_R1_debug.apk
+            dist/Local-Portrait-Lab_R1_debug.sha256
+          if-no-files-found: error
+          retention-days: 14
