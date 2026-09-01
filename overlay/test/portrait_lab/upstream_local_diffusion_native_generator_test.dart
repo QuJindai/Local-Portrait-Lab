@@ -9,7 +9,7 @@ class FakeUpstreamImg2ImgSession implements UpstreamImg2ImgSession {
   NativeImg2ImgRequest? lastRequest;
   bool disposed = false;
   bool hold = false;
-  final Completer<Uint8List> _heldResult = Completer<Uint8List>();
+  Completer<Uint8List>? _heldResult;
   final Uint8List result = Uint8List.fromList(<int>[137, 80, 78, 71]);
 
   @override
@@ -21,7 +21,8 @@ class FakeUpstreamImg2ImgSession implements UpstreamImg2ImgSession {
     lastRequest = request;
     onProgress(1, request.sampleSteps, 0.2);
     if (hold) {
-      return _heldResult.future;
+      final heldResult = _heldResult ??= Completer<Uint8List>();
+      return heldResult.future;
     }
     onProgress(request.sampleSteps, request.sampleSteps, 1.1);
     return result;
@@ -30,8 +31,9 @@ class FakeUpstreamImg2ImgSession implements UpstreamImg2ImgSession {
   @override
   Future<void> dispose() async {
     disposed = true;
-    if (hold && !_heldResult.isCompleted) {
-      _heldResult.completeError(StateError('native session disposed'));
+    final heldResult = _heldResult;
+    if (hold && heldResult != null && !heldResult.isCompleted) {
+      heldResult.completeError(StateError('native session disposed'));
     }
   }
 }
