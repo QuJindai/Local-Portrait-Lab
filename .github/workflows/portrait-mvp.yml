@@ -48,24 +48,28 @@ jobs:
             echo "No portrait tests committed yet; bootstrap baseline only."
           fi
 
-      - name: Build Portrait Lab debug APK
+      - name: Build Portrait Lab R2 debug APK
         working-directory: _build/local-diffusion
-        run: flutter build apk --debug --target lib/portrait_lab_entry.dart
+        run: >-
+          flutter build apk --debug
+          --target lib/portrait_lab_entry.dart
+          --build-name 0.2.0-r2
+          --build-number 2
 
-      - name: Stage APK
+      - name: Stage R2 APK
         shell: bash
         run: |
           mkdir -p dist
           cp _build/local-diffusion/build/app/outputs/flutter-apk/app-debug.apk \
-            dist/Local-Portrait-Lab_R1_debug.apk
-          sha256sum dist/Local-Portrait-Lab_R1_debug.apk | tee dist/Local-Portrait-Lab_R1_debug.sha256
+            dist/Local-Portrait-Lab_R2_debug.apk
+          sha256sum dist/Local-Portrait-Lab_R2_debug.apk | tee dist/Local-Portrait-Lab_R2_debug.sha256
 
-      - name: Upload Portrait Lab APK
+      - name: Upload Portrait Lab R2 APK
         uses: actions/upload-artifact@v4
         with:
-          name: Local-Portrait-Lab_R1_debug
+          name: Local-Portrait-Lab_R2_debug
           path: |
-            dist/Local-Portrait-Lab_R1_debug.apk
-            dist/Local-Portrait-Lab_R1_debug.sha256
+            dist/Local-Portrait-Lab_R2_debug.apk
+            dist/Local-Portrait-Lab_R2_debug.sha256
           if-no-files-found: error
           retention-days: 14
