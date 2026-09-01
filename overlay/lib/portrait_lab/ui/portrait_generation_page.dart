@@ -7,6 +7,7 @@ import '../domain/portrait_generation_request.dart';
 import '../domain/portrait_generation_state.dart';
 import '../domain/portrait_style.dart';
 import '../infrastructure/local_diffusion_runtime_profile.dart';
+import '../infrastructure/portrait_compute_backend.dart';
 import 'portrait_result_page.dart';
 
 class PortraitGenerationPage extends StatefulWidget {
@@ -127,6 +128,7 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
       style: widget.style,
     );
     final runtimeProfile = LocalDiffusionRuntimeProfile.forRequest(request);
+    final computeBackend = PortraitComputeBackendRegistry.current;
     final hasSamplingProgress = _steps > 0;
     final progress = hasSamplingProgress ? (_step / _steps).clamp(0.0, 1.0) : null;
     final percent = progress == null ? null : (progress * 100).round();
@@ -135,7 +137,10 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('正在本地生成', style: TextStyle(fontWeight: FontWeight.w900)),
+        title: Text(
+          computeBackend.isGpuAccelerated ? 'GPU 本地生成' : '本地生成 · CPU 回退',
+          style: const TextStyle(fontWeight: FontWeight.w900),
+        ),
         automaticallyImplyLeading: false,
       ),
       body: SafeArea(
@@ -209,21 +214,27 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
               key: const Key('portrait-runtime-diagnostics'),
               padding: const EdgeInsets.all(13),
               decoration: BoxDecoration(
-                color: runtimeProfile.isFastPath
-                    ? const Color(0xFFEDE8FF)
-                    : const Color(0xFFF3F1F6),
+                color: computeBackend.isGpuAccelerated
+                    ? const Color(0xFFE8F2FF)
+                    : runtimeProfile.isFastPath
+                        ? const Color(0xFFEDE8FF)
+                        : const Color(0xFFF3F1F6),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
-                    runtimeProfile.isFastPath
-                        ? Icons.bolt_rounded
-                        : Icons.speed_rounded,
-                    color: runtimeProfile.isFastPath
-                        ? const Color(0xFF6D4CF5)
-                        : const Color(0xFF756E80),
+                    computeBackend.isGpuAccelerated
+                        ? Icons.memory_rounded
+                        : runtimeProfile.isFastPath
+                            ? Icons.bolt_rounded
+                            : Icons.speed_rounded,
+                    color: computeBackend.isGpuAccelerated
+                        ? const Color(0xFF3478F6)
+                        : runtimeProfile.isFastPath
+                            ? const Color(0xFF6D4CF5)
+                            : const Color(0xFF756E80),
                     size: 20,
                   ),
                   const SizedBox(width: 9),
@@ -232,12 +243,12 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          runtimeProfile.isFastPath ? 'R4 FAST · ${runtimeProfile.label}' : runtimeProfile.label,
+                          '${computeBackend.displayLabel} · ${runtimeProfile.isFastPath ? 'LCM FAST · ' : ''}${runtimeProfile.label}',
                           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          '中心裁剪 → ${request.width}×${request.height} RGB · 已运行 ${elapsedSeconds.toStringAsFixed(1)}s',
+                          '${computeBackend.detailLabel} · 中心裁剪 ${request.width}×${request.height} RGB · 已运行 ${elapsedSeconds.toStringAsFixed(1)}s',
                           style: const TextStyle(fontSize: 11, color: Color(0xFF766F81)),
                         ),
                       ],
@@ -332,7 +343,7 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
             ),
             const SizedBox(height: 10),
             const Text(
-              'R4 仅展示当前后端真实可获得的采样与尺寸信息；不会伪造 CLIP/UNet/VAE 分段耗时。',
+              'R5 展示实际 FFI backend；若看到 GPU · Vulkan，推理 isolate 也会加载 Vulkan 后端。',
               textAlign: TextAlign.center,
               style: TextStyle(color: Color(0xFF96909F), fontSize: 10.5),
             ),
