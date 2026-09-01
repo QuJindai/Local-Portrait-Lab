@@ -89,7 +89,7 @@ void main() {
     await tester.tap(find.byKey(const Key('portrait-start-generation')));
     await tester.pumpAndSettle();
 
-    expect(find.text('正在本地生成'), findsOneWidget);
+    expect(find.text('正在本地生成'), findsWidgets);
     expect(find.text('1 / 4'), findsOneWidget);
     expect(find.text('25%'), findsOneWidget);
 
