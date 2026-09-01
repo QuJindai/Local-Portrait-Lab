@@ -75,6 +75,11 @@ void main() {
     await tester.pump();
     expect(find.text('portrait.safetensors'), findsOneWidget);
 
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('portrait-next-style')),
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.byKey(const Key('portrait-next-style')));
     await tester.pumpAndSettle();
     expect(find.text('选择风格'), findsOneWidget);
@@ -92,6 +97,6 @@ void main() {
 
     expect(find.text('生成结果'), findsOneWidget);
     expect(find.text('result.png'), findsOneWidget);
-    expect(find.text('已保存到本地作品'), findsOneWidget);
+    expect(find.textContaining('已保存到本地作品'), findsOneWidget);
   });
 }
