@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../application/portrait_generation_controller.dart';
+import '../domain/portrait_generation_request.dart';
 import '../domain/portrait_generation_state.dart';
 import '../domain/portrait_style.dart';
+import '../infrastructure/local_diffusion_runtime_profile.dart';
 import 'portrait_result_page.dart';
 
 class PortraitGenerationPage extends StatefulWidget {
@@ -34,10 +36,12 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
   String? _error;
   bool _cancelled = false;
   bool _started = false;
+  late final Stopwatch _stopwatch;
 
   @override
   void initState() {
     super.initState();
+    _stopwatch = Stopwatch()..start();
     _subscription = widget.controller.states.listen(_onState);
     WidgetsBinding.instance.addPostFrameCallback((_) => _start());
   }
@@ -52,6 +56,7 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
         style: widget.style,
       );
       if (!mounted) return;
+      _stopwatch.stop();
       await Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
           builder: (_) => PortraitResultPage(
@@ -64,6 +69,7 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
         ),
       );
     } on PortraitGenerationCancelledException {
+      _stopwatch.stop();
       if (mounted) {
         setState(() {
           _cancelled = true;
@@ -71,6 +77,7 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
         });
       }
     } catch (error) {
+      _stopwatch.stop();
       if (mounted) {
         setState(() {
           _error = error.toString();
@@ -107,16 +114,24 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
 
   @override
   void dispose() {
+    _stopwatch.stop();
     _subscription?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final request = PortraitGenerationRequest.fromStyle(
+      portraitPath: widget.portraitPath,
+      modelPath: widget.modelPath,
+      style: widget.style,
+    );
+    final runtimeProfile = LocalDiffusionRuntimeProfile.forRequest(request);
     final hasSamplingProgress = _steps > 0;
     final progress = hasSamplingProgress ? (_step / _steps).clamp(0.0, 1.0) : null;
     final percent = progress == null ? null : (progress * 100).round();
     final currentStage = _stageIndex();
+    final elapsedSeconds = _stopwatch.elapsedMilliseconds / 1000.0;
 
     return Scaffold(
       appBar: AppBar(
@@ -189,6 +204,48 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
               '全部计算在当前设备完成 · $_stage',
               style: const TextStyle(color: Color(0xFF817A8D), fontSize: 13),
             ),
+            const SizedBox(height: 12),
+            Container(
+              key: const Key('portrait-runtime-diagnostics'),
+              padding: const EdgeInsets.all(13),
+              decoration: BoxDecoration(
+                color: runtimeProfile.isFastPath
+                    ? const Color(0xFFEDE8FF)
+                    : const Color(0xFFF3F1F6),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    runtimeProfile.isFastPath
+                        ? Icons.bolt_rounded
+                        : Icons.speed_rounded,
+                    color: runtimeProfile.isFastPath
+                        ? const Color(0xFF6D4CF5)
+                        : const Color(0xFF756E80),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          runtimeProfile.isFastPath ? 'R4 FAST · ${runtimeProfile.label}' : runtimeProfile.label,
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '中心裁剪 → ${request.width}×${request.height} RGB · 已运行 ${elapsedSeconds.toStringAsFixed(1)}s',
+                          style: const TextStyle(fontSize: 11, color: Color(0xFF766F81)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 18),
             Container(
               padding: const EdgeInsets.all(16),
@@ -201,7 +258,7 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
                 children: [
                   _StageRow(
                     title: '分析人物特征',
-                    subtitle: '读取本地照片',
+                    subtitle: '读取并对齐本地照片',
                     state: _stageState(0, currentStage),
                   ),
                   const _StageConnector(),
@@ -275,9 +332,9 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
             ),
             const SizedBox(height: 10),
             const Text(
-              '照片、模型和生成结果不会上传到服务器。',
+              'R4 仅展示当前后端真实可获得的采样与尺寸信息；不会伪造 CLIP/UNet/VAE 分段耗时。',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Color(0xFF96909F), fontSize: 11),
+              style: TextStyle(color: Color(0xFF96909F), fontSize: 10.5),
             ),
           ],
         ),
