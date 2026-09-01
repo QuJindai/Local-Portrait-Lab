@@ -1,0 +1,15 @@
+Local Portrait Lab
+
+This project contains modifications and integration code designed to run with Local-Diffusion.
+
+Upstream project:
+  Local-Diffusion by rmatif
+  https://github.com/rmatif/Local-Diffusion
+  Locked development baseline: 184b7f92cf2f810e7d5eb4b04b190a5da829005f
+  License: Apache License 2.0
+
+Core native engine used by Local-Diffusion:
+  stable-diffusion.cpp
+  https://github.com/leejet/stable-diffusion.cpp
+
+Modified/new Portrait Lab files are maintained in this repository. When the upstream source is materialized for build, its original copyright, license, and attribution notices must be retained.
