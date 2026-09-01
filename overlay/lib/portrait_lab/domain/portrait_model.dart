@@ -10,6 +10,7 @@ class PortraitModelSpec {
     required this.fileName,
     required this.downloadUrl,
     required this.expectedSha256,
+    this.fastRecommended = false,
   });
 
   final String id;
@@ -22,12 +23,28 @@ class PortraitModelSpec {
   final String fileName;
   final String downloadUrl;
   final String expectedSha256;
+  final bool fastRecommended;
 }
 
 class PortraitModelCatalog {
   const PortraitModelCatalog._();
 
   static const curated = <PortraitModelSpec>[
+    PortraitModelSpec(
+      id: 'lcm_dreamshaper7',
+      displayName: 'LCM DreamShaper 7 · FAST',
+      description: '极速推荐 · LCM 6 步 / CFG 1.0，优先用于当前兼容后端的快速人像验证。',
+      sourceLabel: 'Hugging Face · Runware/lcm-dreamshaper-v7',
+      licenseLabel: 'See model card',
+      format: 'SafeTensors',
+      sizeLabel: '3.44 GB',
+      fileName: 'LCM_Dreamshaper_v7_4k.safetensors',
+      downloadUrl:
+          'https://huggingface.co/Runware/lcm-dreamshaper-v7/resolve/main/LCM_Dreamshaper_v7_4k.safetensors?download=true',
+      expectedSha256:
+          '84feab3a32f1d36108b762b25dad483ca9e37f719b23e0cfd0fdc4ad3fd5409b',
+      fastRecommended: true,
+    ),
     PortraitModelSpec(
       id: 'sd15',
       displayName: 'Stable Diffusion 1.5',
@@ -45,7 +62,7 @@ class PortraitModelCatalog {
     PortraitModelSpec(
       id: 'dreamshaper8',
       displayName: 'DreamShaper 8',
-      description: '通用人像与插画 · 约 2.13 GB，适合多风格快速验证。',
+      description: '通用人像与插画 · 约 2.13 GB，标准采样用于质量/兼容性对照。',
       sourceLabel: 'Hugging Face · casque/dreamshaper_8',
       licenseLabel: 'CreativeML Open RAIL-M',
       format: 'SafeTensors',
@@ -59,7 +76,7 @@ class PortraitModelCatalog {
     PortraitModelSpec(
       id: 'realisticvision6',
       displayName: 'Realistic Vision 6',
-      description: '写实人像方向 · 约 2.13 GB，优先用于真人照片风格化。',
+      description: '写实人像方向 · 约 2.13 GB，优先用于真人照片质量对照。',
       sourceLabel: 'Hugging Face · visible-tactics',
       licenseLabel: 'CreativeML Open RAIL-M',
       format: 'SafeTensors',
