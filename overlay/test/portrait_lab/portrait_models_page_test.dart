@@ -20,7 +20,10 @@ class _FakeDownloader implements PortraitModelDownloadService {
   Stream<PortraitModelDownloadState> download(PortraitModelSpec model) async* {
     requested = model;
     yield PortraitModelDownloadProgress(model, receivedBytes: 50, totalBytes: 100);
-    yield PortraitModelDownloadCompleted(model, '/models/${model.fileName}');
+    yield PortraitModelDownloadCompleted(
+      model,
+      model.isArchive ? '/models/${model.id}' : '/models/${model.fileName}',
+    );
   }
 
   @override
@@ -28,7 +31,7 @@ class _FakeDownloader implements PortraitModelDownloadService {
 }
 
 void main() {
-  testWidgets('P06 model manager downloads curated model and returns usable path',
+  testWidgets('P06 prioritizes DREAM DMD2 models and keeps fallback model usable',
       (tester) async {
     final downloader = _FakeDownloader();
     String? selectedPath;
@@ -61,15 +64,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('模型管理'), findsOneWidget);
-    expect(find.text('LCM DreamShaper 7 · FAST'), findsOneWidget);
+    expect(find.text('Illustrious v16 DMD2'), findsOneWidget);
+    expect(find.text('CyberRealistic v10 DMD2'), findsOneWidget);
     expect(find.text('Stable Diffusion 1.5'), findsOneWidget);
     expect(find.text('DreamShaper 8'), findsOneWidget);
     expect(find.text('Realistic Vision 6'), findsOneWidget);
     expect(find.text('导入本地模型'), findsOneWidget);
+    expect(find.text('LCM DreamShaper 7 · FAST'), findsNothing);
 
     await tester.scrollUntilVisible(
       find.byKey(const Key('model-download-sd15')),
-      260,
+      300,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.tap(find.byKey(const Key('model-download-sd15')));
