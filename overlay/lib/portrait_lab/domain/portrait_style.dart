@@ -49,7 +49,7 @@ extension PortraitStyleConfiguration on PortraitStyle {
           strength: 0.55,
           cfgScale: 6.0,
           steps: 20,
-          width: 512,
+          width: 576,
           height: 768,
           recommendedModelFamily: 'portrait-img2img',
         );
@@ -64,7 +64,7 @@ extension PortraitStyleConfiguration on PortraitStyle {
           strength: 0.62,
           cfgScale: 6.5,
           steps: 22,
-          width: 512,
+          width: 576,
           height: 768,
           recommendedModelFamily: 'anime-img2img',
         );
@@ -79,7 +79,7 @@ extension PortraitStyleConfiguration on PortraitStyle {
           strength: 0.65,
           cfgScale: 6.5,
           steps: 22,
-          width: 512,
+          width: 576,
           height: 768,
           recommendedModelFamily: 'anime-img2img',
         );
@@ -94,7 +94,7 @@ extension PortraitStyleConfiguration on PortraitStyle {
           strength: 0.42,
           cfgScale: 5.5,
           steps: 20,
-          width: 512,
+          width: 576,
           height: 768,
           recommendedModelFamily: 'realistic-portrait',
         );
@@ -109,7 +109,7 @@ extension PortraitStyleConfiguration on PortraitStyle {
           strength: 0.52,
           cfgScale: 6.0,
           steps: 22,
-          width: 512,
+          width: 576,
           height: 768,
           recommendedModelFamily: 'realistic-portrait',
         );
@@ -124,7 +124,7 @@ extension PortraitStyleConfiguration on PortraitStyle {
           strength: 0.48,
           cfgScale: 5.8,
           steps: 20,
-          width: 512,
+          width: 576,
           height: 768,
           recommendedModelFamily: 'realistic-portrait',
         );
@@ -139,7 +139,7 @@ extension PortraitStyleConfiguration on PortraitStyle {
           strength: 0.62,
           cfgScale: 6.5,
           steps: 24,
-          width: 512,
+          width: 576,
           height: 768,
           recommendedModelFamily: 'illustration-portrait',
         );
@@ -154,7 +154,7 @@ extension PortraitStyleConfiguration on PortraitStyle {
           strength: 0.58,
           cfgScale: 6.5,
           steps: 22,
-          width: 512,
+          width: 576,
           height: 768,
           recommendedModelFamily: 'stylized-portrait',
         );
