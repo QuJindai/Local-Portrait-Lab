@@ -90,6 +90,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('正在本地生成'), findsWidgets);
+    await tester.scrollUntilVisible(
+      find.text('1 / 4'),
+      220,
+      scrollable: find.byType(Scrollable).last,
+    );
     expect(find.text('1 / 4'), findsOneWidget);
     expect(find.text('25%'), findsOneWidget);
 
