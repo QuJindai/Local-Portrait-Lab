@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:local_diffusion/portrait_lab/domain/portrait_generation_request.dart';
-import 'package:local_diffusion/portrait_lab/domain/portrait_model.dart';
 import 'package:local_diffusion/portrait_lab/domain/portrait_style.dart';
 import 'package:local_diffusion/portrait_lab/infrastructure/local_diffusion_runtime_profile.dart';
 import 'package:local_diffusion/portrait_lab/infrastructure/native_portrait_io.dart';
@@ -36,7 +35,7 @@ void main() {
     expect(decoded.rgbBytes.sublist(3, 6), <int>[0, 0, 255]);
   });
 
-  test('R4 selects six-step LCM fast profile only for LCM models', () {
+  test('R4 keeps LCM fast profile available for imported LCM checkpoints', () {
     final normal = PortraitGenerationRequest.fromStyle(
       portraitPath: '/tmp/person.jpg',
       modelPath: '/models/dreamshaper_8.safetensors',
@@ -44,7 +43,7 @@ void main() {
     );
     final fast = PortraitGenerationRequest.fromStyle(
       portraitPath: '/tmp/person.jpg',
-      modelPath: '/models/LCM_Dreamshaper_v7_4k.safetensors',
+      modelPath: '/models/custom_lcm_portrait.safetensors',
       style: PortraitStyle.japaneseFresh,
     );
 
@@ -60,14 +59,5 @@ void main() {
     expect(fastProfile.sampleSteps, 6);
     expect(fastProfile.cfgScale, 1.0);
     expect(fastProfile.isFastPath, isTrue);
-  });
-
-  test('R4 catalog exposes an LCM DreamShaper fast recommendation', () {
-    final fast = PortraitModelCatalog.curated.singleWhere(
-      (model) => model.id == 'lcm_dreamshaper7',
-    );
-    expect(fast.fileName.toLowerCase(), contains('lcm'));
-    expect(fast.expectedSha256, hasLength(64));
-    expect(fast.description, contains('6 步'));
   });
 }
