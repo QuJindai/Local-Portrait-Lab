@@ -94,14 +94,19 @@ class _PortraitHomePageState extends State<PortraitHomePage> {
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
+            _ModelRow(
+              modelPath: _modelPath,
+              onPick: _pickModel,
+            ),
+            const SizedBox(height: 14),
             _PhotoHero(
               key: const Key('portrait-hero-photo'),
               portraitPath: _portraitPath,
               onPick: _pickPortrait,
             ),
             const SizedBox(height: 22),
-            _SectionHeader(
+            const _SectionHeader(
               title: '热门风格',
               trailing: '8 种本地预设',
             ),
@@ -131,11 +136,6 @@ class _PortraitHomePageState extends State<PortraitHomePage> {
                 SizedBox(width: 8),
                 _RatioChip(label: '9:16', enabled: false),
               ],
-            ),
-            const SizedBox(height: 22),
-            _ModelRow(
-              modelPath: _modelPath,
-              onPick: _pickModel,
             ),
             const SizedBox(height: 22),
             SizedBox(
@@ -477,35 +477,35 @@ class _ModelRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final selected = modelPath != null;
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+      padding: const EdgeInsets.fromLTRB(14, 9, 10, 9),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFEAE6F0)),
       ),
       child: Row(
         children: [
           Container(
-            width: 42,
-            height: 42,
+            width: 38,
+            height: 38,
             decoration: BoxDecoration(
               color: const Color(0xFFF0ECFF),
-              borderRadius: BorderRadius.circular(13),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.memory_rounded, color: _PortraitHomePageState._brand),
+            child: const Icon(Icons.memory_rounded, color: _PortraitHomePageState._brand, size: 21),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('本地模型', style: TextStyle(fontWeight: FontWeight.w900)),
-                const SizedBox(height: 3),
+                const Text('本地模型', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+                const SizedBox(height: 2),
                 Text(
                   selected ? portraitFileName(modelPath!) : '选择 Local-Diffusion 模型',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Color(0xFF837C8F), fontSize: 12),
+                  style: const TextStyle(color: Color(0xFF837C8F), fontSize: 11),
                 ),
               ],
             ),
@@ -513,6 +513,7 @@ class _ModelRow extends StatelessWidget {
           TextButton(
             key: const Key('portrait-pick-model'),
             onPressed: onPick,
+            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
             child: Text(selected ? '更换' : '选择'),
           ),
         ],
