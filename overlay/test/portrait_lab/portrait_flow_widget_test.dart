@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_diffusion/portrait_lab/application/portrait_generation_controller.dart';
 import 'package:local_diffusion/portrait_lab/application/portrait_generation_engine.dart';
@@ -51,8 +52,29 @@ class ControlledPortraitEngine implements PortraitGenerationEngine {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   testWidgets('P01 to P04 uses real engine progress and reaches generated result',
       (tester) async {
+    const galleryChannel = MethodChannel('com.qujindai.localportraitlab/gallery');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(galleryChannel, (call) async {
+      if (call.method == 'export') {
+        return <String, Object?>{
+          'uri': 'content://media/external/images/media/101',
+          'displayName': 'portrait_101.png',
+          'relativePath': 'Pictures/Portrait Lab',
+          'mimeType': 'image/png',
+        };
+      }
+      if (call.method == 'open') return null;
+      throw PlatformException(code: 'unexpected', message: call.method);
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(galleryChannel, null);
+    });
+
     final engine = ControlledPortraitEngine();
     final controller = PortraitGenerationController(engine);
     addTearDown(controller.dispose);
@@ -105,6 +127,7 @@ void main() {
     await tester.drag(find.byType(ListView).last, const Offset(0, -1000));
     await tester.pumpAndSettle();
     expect(find.text('result.png'), findsOneWidget);
-    expect(find.textContaining('已保存到本地作品'), findsOneWidget);
+    expect(find.textContaining('已保存到系统相册'), findsOneWidget);
+    expect(find.textContaining('Pictures/Portrait Lab'), findsWidgets);
   });
 }

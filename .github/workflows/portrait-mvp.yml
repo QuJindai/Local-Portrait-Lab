@@ -92,11 +92,27 @@ jobs:
           test -s THIRD_PARTY_DREAM_QNN_NONCOMMERCIAL.md
           echo R8_STANDALONE_QNN_SOURCE_CONTRACT_PASS
 
+      - name: Verify R9 MediaStore gallery export contract
+        shell: bash
+        run: |
+          GALLERY=_build/local-diffusion/android/app/src/main/kotlin/com/qujindai/localportraitlab/PortraitGalleryExporter.kt
+          ACTIVITY=_build/local-diffusion/android/app/src/main/kotlin/com/qujindai/localportraitlab/MainActivity.kt
+          RESULT=_build/local-diffusion/lib/portrait_lab/ui/portrait_result_page.dart
+          grep -F 'MediaStore.Images.Media.EXTERNAL_CONTENT_URI' "$GALLERY"
+          grep -F 'MediaStore.Images.Media.RELATIVE_PATH' "$GALLERY"
+          grep -F 'MediaStore.Images.Media.IS_PENDING' "$GALLERY"
+          grep -F 'Pictures/Portrait Lab' "$GALLERY"
+          grep -F 'source.inputStream().buffered()' "$GALLERY"
+          grep -F 'com.qujindai.localportraitlab/gallery' "$ACTIVITY"
+          grep -F '已保存到系统相册' "$RESULT"
+          grep -F '生成成功，但保存到相册失败' "$RESULT"
+          echo R9_MEDIASTORE_GALLERY_CONTRACT_PASS
+
       - name: Resolve Flutter packages
         working-directory: _build/local-diffusion
         run: flutter pub get
 
-      - name: Verify portrait domain, native downloads and three backend routes
+      - name: Verify portrait domain, gallery export, native downloads and three backend routes
         working-directory: _build/local-diffusion
         shell: bash
         run: flutter test test/portrait_lab
@@ -110,9 +126,6 @@ jobs:
           sudo apt-get install -y -qq ninja-build ccache
           rustup target add aarch64-linux-android
           test -d "$ANDROID_HOME/ndk/$NDK_VERSION"
-          # Local Dream's pinned CMake preset overrides ANDROID_NDK_ROOT with
-          # /data/android-ndk-r28. Keep the pinned third-party source unchanged
-          # and provide the compatibility path expected by that preset.
           sudo mkdir -p /data
           sudo ln -sfn "$ANDROID_HOME/ndk/$NDK_VERSION" /data/android-ndk-r28
           test -f /data/android-ndk-r28/build/cmake/android.toolchain.cmake
@@ -170,9 +183,6 @@ jobs:
           QNN_ROOT="$(dirname "$(dirname "$(dirname "$HEADER")")")"
           test -s "$QNN_ROOT/lib/aarch64-android/libQnnHtp.so"
           test -d "$QNN_ROOT/examples/QNN/SampleApp/SampleApp"
-          # The pinned Local Dream CMakeLists also hardcodes its QAIRT root.
-          # Map the actual downloaded SDK to that exact compatibility path,
-          # just as we do for its pinned NDK path, without mutating upstream.
           sudo mkdir -p /data/qairt
           sudo ln -sfn "$QNN_ROOT" /data/qairt/2.39.0.250926
           test -d /data/qairt/2.39.0.250926/examples/QNN/SampleApp/SampleApp
@@ -186,26 +196,26 @@ jobs:
           set -euo pipefail
           export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/$NDK_VERSION"
           cd third_party/local-dream/app/src/main/cpp
-          bash build.sh 2>&1 | tee ../../../../../../qnn-native-r8.log
+          bash build.sh 2>&1 | tee ../../../../../../qnn-native-r9.log
           CORE=../jniLibs/arm64-v8a/libstable_diffusion_core.so
           test -s "$CORE"
           test -s ../assets/qnnlibs/libQnnHtp.so
 
-      - name: Print R8 QNN native failure tail
+      - name: Print QNN native failure tail
         if: failure()
         shell: bash
         run: |
-          echo '===== R8 QNN NATIVE FAILURE TAIL ====='
-          tail -n 240 qnn-native-r8.log || true
-          echo '===== END R8 QNN NATIVE FAILURE TAIL ====='
+          echo '===== QNN NATIVE FAILURE TAIL ====='
+          tail -n 240 qnn-native-r9.log || true
+          echo '===== END QNN NATIVE FAILURE TAIL ====='
 
-      - name: Upload R8 QNN native diagnostics
+      - name: Upload QNN native diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: r8-qnn-native-diagnostics
+          name: r9-qnn-native-diagnostics
           path: |
-            qnn-native-r8.log
+            qnn-native-r9.log
             third_party/local-dream/app/src/main/cpp/build/**/CMakeCache.txt
             third_party/local-dream/app/src/main/cpp/build/**/CMakeFiles/CMakeOutput.log
             third_party/local-dream/app/src/main/cpp/build/**/CMakeFiles/CMakeError.log
@@ -224,41 +234,41 @@ jobs:
           cp -R third_party/local-dream/app/src/main/assets/qnnlibs "$APP/assets/qnnlibs"
           test -s "$APP/jniLibs/arm64-v8a/libstable_diffusion_core.so"
           test -s "$APP/assets/qnnlibs/libQnnHtp.so"
-          echo R8_QNN_NATIVE_STAGE_PASS
+          echo R9_QNN_NATIVE_STAGE_PASS
 
-      - name: Build Portrait Lab R8 standalone-QNN debug APK
+      - name: Build Portrait Lab R9 gallery-QNN debug APK
         working-directory: _build/local-diffusion
-        run: flutter build apk --debug --target lib/portrait_lab_entry.dart --build-name=0.8.0-r8 --build-number=8
+        run: flutter build apk --debug --target lib/portrait_lab_entry.dart --build-name=0.9.0-r9 --build-number=9
 
-      - name: Verify standalone QNN and fallback runtimes are bundled
+      - name: Verify QNN and fallback runtimes are bundled
         shell: bash
         run: |
           set -euo pipefail
           APK=_build/local-diffusion/build/app/outputs/flutter-apk/app-debug.apk
-          zipinfo -1 "$APK" > /tmp/r8-apk-files.txt
-          grep -Fx 'lib/arm64-v8a/libstable_diffusion_core.so' /tmp/r8-apk-files.txt
-          grep -Fx 'lib/arm64-v8a/libstable-diffusion_vulkan.so' /tmp/r8-apk-files.txt
-          grep -Fx 'lib/arm64-v8a/libstable-diffusion.so' /tmp/r8-apk-files.txt
-          grep -F 'assets/qnnlibs/libQnnHtp.so' /tmp/r8-apk-files.txt
-          echo R8_APK_RUNTIME_BUNDLE_PASS
+          zipinfo -1 "$APK" > /tmp/r9-apk-files.txt
+          grep -Fx 'lib/arm64-v8a/libstable_diffusion_core.so' /tmp/r9-apk-files.txt
+          grep -Fx 'lib/arm64-v8a/libstable-diffusion_vulkan.so' /tmp/r9-apk-files.txt
+          grep -Fx 'lib/arm64-v8a/libstable-diffusion.so' /tmp/r9-apk-files.txt
+          grep -F 'assets/qnnlibs/libQnnHtp.so' /tmp/r9-apk-files.txt
+          echo R9_APK_RUNTIME_BUNDLE_PASS
 
-      - name: Stage R8 APK
+      - name: Stage R9 APK
         shell: bash
         run: |
           mkdir -p dist
           cp _build/local-diffusion/build/app/outputs/flutter-apk/app-debug.apk \
-            dist/Local-Portrait-Lab_R8_STANDALONE_QNN_debug.apk
-          sha256sum dist/Local-Portrait-Lab_R8_STANDALONE_QNN_debug.apk | tee dist/Local-Portrait-Lab_R8_STANDALONE_QNN_debug.sha256
+            dist/Local-Portrait-Lab_R9_GALLERY_QNN_debug.apk
+          sha256sum dist/Local-Portrait-Lab_R9_GALLERY_QNN_debug.apk | tee dist/Local-Portrait-Lab_R9_GALLERY_QNN_debug.sha256
           cp THIRD_PARTY_DREAM_QNN_NONCOMMERCIAL.md dist/
 
-      - name: Upload Portrait Lab R8 APK
+      - name: Upload Portrait Lab R9 APK
         uses: actions/upload-artifact@v4
         with:
-          name: Local-Portrait-Lab_R8_STANDALONE_QNN_debug
+          name: Local-Portrait-Lab_R9_GALLERY_QNN_debug
           path: |
-            dist/Local-Portrait-Lab_R8_STANDALONE_QNN_debug.apk
-            dist/Local-Portrait-Lab_R8_STANDALONE_QNN_debug.sha256
+            dist/Local-Portrait-Lab_R9_GALLERY_QNN_debug.apk
+            dist/Local-Portrait-Lab_R9_GALLERY_QNN_debug.sha256
             dist/THIRD_PARTY_DREAM_QNN_NONCOMMERCIAL.md
-            qnn-native-r8.log
+            qnn-native-r9.log
           if-no-files-found: error
           retention-days: 14

@@ -5,12 +5,16 @@ import android.os.Build
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.util.concurrent.Executors
 
 class MainActivity : FlutterActivity() {
+    private val galleryExecutor = Executors.newSingleThreadExecutor()
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         configureModelDownloadChannel(flutterEngine)
         configureQnnBackendChannel(flutterEngine)
+        configureGalleryChannel(flutterEngine)
     }
 
     private fun configureModelDownloadChannel(flutterEngine: FlutterEngine) {
@@ -123,6 +127,58 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun configureGalleryChannel(flutterEngine: FlutterEngine) {
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            GALLERY_CHANNEL,
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "export" -> {
+                    val sourcePath = call.argument<String>("sourcePath")
+                    if (sourcePath.isNullOrBlank()) {
+                        result.error("BAD_ARGS", "系统相册导出路径为空", null)
+                        return@setMethodCallHandler
+                    }
+                    galleryExecutor.execute {
+                        try {
+                            val receipt = PortraitGalleryExporter.export(this, sourcePath)
+                            runOnUiThread { result.success(receipt) }
+                        } catch (error: Exception) {
+                            runOnUiThread {
+                                result.error(
+                                    "GALLERY_EXPORT_FAILED",
+                                    error.message ?: error.javaClass.simpleName,
+                                    null,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                "open" -> {
+                    val uri = call.argument<String>("uri")
+                    val mimeType = call.argument<String>("mimeType") ?: "image/*"
+                    if (uri.isNullOrBlank()) {
+                        result.error("BAD_ARGS", "系统相册 URI 为空", null)
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        PortraitGalleryExporter.open(this, uri, mimeType)
+                        result.success(null)
+                    } catch (error: Exception) {
+                        result.error(
+                            "GALLERY_OPEN_FAILED",
+                            error.message ?: error.javaClass.simpleName,
+                            null,
+                        )
+                    }
+                }
+
+                else -> result.notImplemented()
+            }
+        }
+    }
+
     private fun startAsForegroundService(intent: Intent) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)
@@ -131,10 +187,17 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    override fun onDestroy() {
+        galleryExecutor.shutdownNow()
+        super.onDestroy()
+    }
+
     companion object {
         private const val MODEL_DOWNLOAD_CHANNEL =
             "com.qujindai.localportraitlab/model_download"
         private const val QNN_BACKEND_CHANNEL =
             "com.qujindai.localportraitlab/qnn_backend"
+        private const val GALLERY_CHANNEL =
+            "com.qujindai.localportraitlab/gallery"
     }
 }
