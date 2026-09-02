@@ -110,6 +110,13 @@ jobs:
           sudo apt-get install -y -qq ninja-build ccache
           rustup target add aarch64-linux-android
           test -d "$ANDROID_HOME/ndk/$NDK_VERSION"
+          # Local Dream's pinned CMake preset overrides ANDROID_NDK_ROOT with
+          # /data/android-ndk-r28. Keep the pinned third-party source unchanged
+          # and provide the compatibility path expected by that preset.
+          sudo mkdir -p /data
+          sudo ln -sfn "$ANDROID_HOME/ndk/$NDK_VERSION" /data/android-ndk-r28
+          test -f /data/android-ndk-r28/build/cmake/android.toolchain.cmake
+          echo R8_PINNED_NDK_COMPAT_PATH_PASS
 
       - name: Clone pinned Local Dream QNN source
         shell: bash
@@ -170,7 +177,7 @@ jobs:
           set -euo pipefail
           export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/$NDK_VERSION"
           cd third_party/local-dream/app/src/main/cpp
-          bash build.sh 2>&1 | tee ../../../../../qnn-native-r8.log
+          bash build.sh 2>&1 | tee ../../../../../../qnn-native-r8.log
           CORE=../jniLibs/arm64-v8a/libstable_diffusion_core.so
           test -s "$CORE"
           test -s ../assets/qnnlibs/libQnnHtp.so
