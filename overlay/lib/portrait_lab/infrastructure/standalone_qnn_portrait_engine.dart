@@ -376,7 +376,7 @@ class StandaloneQnnPortraitEngine implements PortraitGenerationEngine {
     String modelDirectory,
   ) async {
     final file = File('$modelDirectory/config.json');
-    if (!await file.isFile()) {
+    if (!await file.exists()) {
       throw const StandaloneQnnConfigurationException(
         'DMD2 独立 QNN 模型缺少 config.json，不能安全猜测 steps/CFG/scheduler。',
       );
