@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../domain/portrait_model.dart';
 import 'portrait_model_downloader.dart';
+import 'qnn_model_layout.dart';
 
 typedef AndroidModelRootDirectoryProvider = Future<Directory> Function();
 
