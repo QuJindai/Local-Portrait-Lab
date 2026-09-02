@@ -182,6 +182,27 @@ jobs:
           test -s "$CORE"
           test -s ../assets/qnnlibs/libQnnHtp.so
 
+      - name: Print R8 QNN native failure tail
+        if: failure()
+        shell: bash
+        run: |
+          echo '===== R8 QNN NATIVE FAILURE TAIL ====='
+          tail -n 240 qnn-native-r8.log || true
+          echo '===== END R8 QNN NATIVE FAILURE TAIL ====='
+
+      - name: Upload R8 QNN native diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r8-qnn-native-diagnostics
+          path: |
+            qnn-native-r8.log
+            third_party/local-dream/app/src/main/cpp/build/**/CMakeCache.txt
+            third_party/local-dream/app/src/main/cpp/build/**/CMakeFiles/CMakeOutput.log
+            third_party/local-dream/app/src/main/cpp/build/**/CMakeFiles/CMakeError.log
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Stage standalone QNN core into Portrait Lab
         shell: bash
         run: |
