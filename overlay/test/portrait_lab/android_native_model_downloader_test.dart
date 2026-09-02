@@ -44,6 +44,7 @@ void main() {
   test('R7 Android downloader delegates large model transport to native service',
       () async {
     final model = PortraitModelCatalog.curated.first;
+    final modelsRoot = '${root.path}/portrait_lab/models';
     statusQueue.addAll(<Map<String, Object?>>[
       <String, Object?>{
         'state': 'downloading',
@@ -58,7 +59,7 @@ void main() {
       <String, Object?>{
         'state': 'success',
         'modelId': model.id,
-        'path': '${root.path}/${model.id}',
+        'path': '$modelsRoot/${model.id}',
       },
     ]);
 
@@ -73,7 +74,7 @@ void main() {
     expect(states.whereType<PortraitModelDownloadProgress>(), hasLength(1));
     expect(states.whereType<PortraitModelDownloadVerifying>(), hasLength(1));
     final completed = states.whereType<PortraitModelDownloadCompleted>().single;
-    expect(completed.path, '${root.path}/${model.id}');
+    expect(completed.path, '$modelsRoot/${model.id}');
 
     final start = calls.firstWhere((call) => call.method == 'start');
     final args = Map<Object?, Object?>.from(start.arguments as Map);
@@ -81,7 +82,7 @@ void main() {
     expect(args['modelId'], model.id);
     expect(args['fileName'], model.fileName);
     expect(args['isArchive'], isTrue);
-    expect(args['destinationRoot'], root.path);
+    expect(args['destinationRoot'], modelsRoot);
     expect(args['requiredFiles'], isA<List<Object?>>());
   });
 
