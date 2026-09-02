@@ -100,16 +100,18 @@ void main() {
     expect(output.bytes, isNotNull);
   });
 
-  test('backend router sends dream:// models to DREAM and safetensors to fallback', () async {
+  test('backend router keeps DREAM Host and stable fallback separate from QNN', () async {
     final accelerator = _FakeDreamAccelerator();
     final dream = DreamHostPortraitEngine(
       accelerator: accelerator,
       outputStore: _FakeOutputStore(),
     );
     final fallback = _CountingEngine();
+    final qnn = _CountingEngine();
     final router = PortraitBackendRouterEngine(
       stableEngine: fallback,
       dreamEngine: dream,
+      standaloneQnnEngine: qnn,
     );
 
     await router.generate(
@@ -122,6 +124,7 @@ void main() {
     );
     expect(accelerator.selectedId, 'cyber_realistic_v10_dmd2');
     expect(fallback.calls, 0);
+    expect(qnn.calls, 0);
 
     await router.generate(
       PortraitGenerationRequest.fromStyle(
@@ -132,5 +135,6 @@ void main() {
       onState: (_) {},
     );
     expect(fallback.calls, 1);
+    expect(qnn.calls, 0);
   });
 }
