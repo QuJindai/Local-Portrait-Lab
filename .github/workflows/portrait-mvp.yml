@@ -34,7 +34,7 @@ jobs:
       - name: Verify Portrait Lab Android identity and storage policy
         run: bash scripts/verify_portrait_android.sh _build/local-diffusion
 
-      - name: Verify R6 localhost-only DREAM network policy
+      - name: Verify localhost-only DREAM network policy
         shell: bash
         run: |
           MANIFEST=_build/local-diffusion/android/app/src/main/AndroidManifest.xml
@@ -44,11 +44,28 @@ jobs:
           grep -F '<domain includeSubdomains="false">localhost</domain>' "$NETCFG"
           grep -F '<base-config cleartextTrafficPermitted="false"' "$NETCFG"
 
+      - name: Verify R7 DREAM-style native download contract
+        shell: bash
+        run: |
+          SERVICE=_build/local-diffusion/android/app/src/main/kotlin/com/qujindai/localportraitlab/PortraitModelDownloadService.kt
+          ACTIVITY=_build/local-diffusion/android/app/src/main/kotlin/com/qujindai/localportraitlab/MainActivity.kt
+          GRADLE=_build/local-diffusion/android/app/build.gradle
+          MANIFEST=_build/local-diffusion/android/app/src/main/AndroidManifest.xml
+          grep -F 'PortraitModelDownloadService' "$MANIFEST"
+          grep -F 'FOREGROUND_SERVICE_DATA_SYNC' "$MANIFEST"
+          grep -F 'com.squareup.okhttp3:okhttp:4.12.0' "$GRADLE"
+          grep -F 'OkHttpClient.Builder()' "$SERVICE"
+          grep -F 'ByteArray(32 * 1024)' "$SERVICE"
+          grep -F 'downloadedBytes != totalBytes' "$SERVICE"
+          grep -F 'ZipInputStream' "$SERVICE"
+          grep -F 'com.qujindai.localportraitlab/model_download' "$ACTIVITY"
+          echo R7_NATIVE_DOWNLOAD_CONTRACT_PASS
+
       - name: Resolve Flutter packages
         working-directory: _build/local-diffusion
         run: flutter pub get
 
-      - name: Verify portrait domain, R6 DREAM QNN, downloads and fallback tests
+      - name: Verify portrait domain, R7 native downloads, DREAM QNN and fallback tests
         working-directory: _build/local-diffusion
         shell: bash
         run: |
@@ -58,9 +75,9 @@ jobs:
             echo "No portrait tests committed yet; bootstrap baseline only."
           fi
 
-      - name: Build Portrait Lab R6 DREAM QNN debug APK
+      - name: Build Portrait Lab R7 native-download debug APK
         working-directory: _build/local-diffusion
-        run: flutter build apk --debug --target lib/portrait_lab_entry.dart --build-name=0.6.0-r6 --build-number=6
+        run: flutter build apk --debug --target lib/portrait_lab_entry.dart --build-name=0.7.0-r7 --build-number=7
 
       - name: Verify Vulkan fallback runtime is bundled
         shell: bash
@@ -69,20 +86,20 @@ jobs:
           unzip -l "$APK" | grep -F 'lib/arm64-v8a/libstable-diffusion_vulkan.so'
           unzip -l "$APK" | grep -F 'lib/arm64-v8a/libstable-diffusion.so'
 
-      - name: Stage R6 APK
+      - name: Stage R7 APK
         shell: bash
         run: |
           mkdir -p dist
           cp _build/local-diffusion/build/app/outputs/flutter-apk/app-debug.apk \
-            dist/Local-Portrait-Lab_R6_DREAM_QNN_debug.apk
-          sha256sum dist/Local-Portrait-Lab_R6_DREAM_QNN_debug.apk | tee dist/Local-Portrait-Lab_R6_DREAM_QNN_debug.sha256
+            dist/Local-Portrait-Lab_R7_NATIVE_DOWNLOAD_debug.apk
+          sha256sum dist/Local-Portrait-Lab_R7_NATIVE_DOWNLOAD_debug.apk | tee dist/Local-Portrait-Lab_R7_NATIVE_DOWNLOAD_debug.sha256
 
-      - name: Upload Portrait Lab R6 APK
+      - name: Upload Portrait Lab R7 APK
         uses: actions/upload-artifact@v4
         with:
-          name: Local-Portrait-Lab_R6_DREAM_QNN_debug
+          name: Local-Portrait-Lab_R7_NATIVE_DOWNLOAD_debug
           path: |
-            dist/Local-Portrait-Lab_R6_DREAM_QNN_debug.apk
-            dist/Local-Portrait-Lab_R6_DREAM_QNN_debug.sha256
+            dist/Local-Portrait-Lab_R7_NATIVE_DOWNLOAD_debug.apk
+            dist/Local-Portrait-Lab_R7_NATIVE_DOWNLOAD_debug.sha256
           if-no-files-found: error
           retention-days: 14
