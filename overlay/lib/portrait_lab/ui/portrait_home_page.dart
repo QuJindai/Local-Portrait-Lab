@@ -1,10 +1,12 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 
 import '../application/portrait_generation_controller.dart';
+import '../domain/portrait_model.dart';
 import '../domain/portrait_style.dart';
-import '../infrastructure/portrait_compute_backend.dart';
+import '../infrastructure/portrait_active_model_store.dart';
 import '../infrastructure/portrait_model_downloader.dart';
 import 'portrait_input_picker.dart';
 import 'portrait_models_page.dart';
@@ -17,12 +19,14 @@ class PortraitHomePage extends StatefulWidget {
     required this.photoPicker,
     required this.modelPicker,
     this.modelDownloader,
+    this.activeModelStore,
   });
 
   final PortraitGenerationController controller;
   final PortraitPhotoPicker photoPicker;
   final PortraitModelPicker modelPicker;
   final PortraitModelDownloadService? modelDownloader;
+  final PortraitActiveModelStore? activeModelStore;
 
   @override
   State<PortraitHomePage> createState() => _PortraitHomePageState();
@@ -33,6 +37,78 @@ class _PortraitHomePageState extends State<PortraitHomePage> {
   String? _portraitPath;
   String? _modelPath;
 
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_restoreActiveModel());
+  }
+
+  Future<void> _restoreActiveModel() async {
+    final store = widget.activeModelStore;
+    final downloader = widget.modelDownloader;
+    if (store == null) return;
+
+    String? selection = await store.loadSelection();
+    selection = await _validatePersistedSelection(selection);
+
+    if (selection == null && downloader != null) {
+      for (final model in PortraitModelCatalog.curated) {
+        if (!model.usesDreamQnn) continue;
+        final installed = await downloader.installedPath(model);
+        if (installed == null) continue;
+        final discovered = model.standaloneSelectionUri(installed);
+        if (discovered == null) continue;
+        await store.saveSelection(discovered);
+        selection = discovered;
+        break;
+      }
+    }
+
+    if (!mounted || selection == null) return;
+    setState(() => _modelPath = selection);
+  }
+
+  Future<String?> _validatePersistedSelection(String? selection) async {
+    final store = widget.activeModelStore;
+    if (selection == null || selection.trim().isEmpty || store == null) {
+      return null;
+    }
+    final value = selection.trim();
+    final uri = Uri.tryParse(value);
+    if (uri?.scheme == 'qnn') {
+      final downloader = widget.modelDownloader;
+      final model = portraitModelForSelection(value);
+      if (downloader == null || model == null) {
+        await store.clearSelection();
+        return null;
+      }
+      final installed = await downloader.installedPath(model);
+      if (installed == null) {
+        await store.clearSelection();
+        return null;
+      }
+      final fresh = model.standaloneSelectionUri(installed);
+      if (fresh == null) {
+        await store.clearSelection();
+        return null;
+      }
+      if (fresh != value) await store.saveSelection(fresh);
+      return fresh;
+    }
+    if (uri?.scheme == 'dream') return value;
+    if (await File(value).exists()) return value;
+    await store.clearSelection();
+    return null;
+  }
+
+  Future<void> _activateModel(String selection) async {
+    final value = selection.trim();
+    if (value.isEmpty) return;
+    await widget.activeModelStore?.saveSelection(value);
+    if (!mounted) return;
+    setState(() => _modelPath = value);
+  }
+
   Future<void> _pickPortrait() async {
     final path = await widget.photoPicker.pickPortrait();
     if (!mounted || path == null || path.trim().isEmpty) return;
@@ -42,7 +118,7 @@ class _PortraitHomePageState extends State<PortraitHomePage> {
   Future<void> _pickModel() async {
     final path = await widget.modelPicker.pickModel();
     if (!mounted || path == null || path.trim().isEmpty) return;
-    setState(() => _modelPath = path);
+    await _activateModel(path);
   }
 
   Future<void> _openModelStore() async {
@@ -57,7 +133,7 @@ class _PortraitHomePageState extends State<PortraitHomePage> {
       ),
     );
     if (!mounted || path == null || path.trim().isEmpty) return;
-    setState(() => _modelPath = path);
+    await _activateModel(path);
   }
 
   void _openStyles() {
@@ -85,10 +161,10 @@ class _PortraitHomePageState extends State<PortraitHomePage> {
           'AI 人像',
           style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: -.4),
         ),
-        actions: const [
+        actions: [
           Padding(
-            padding: EdgeInsets.only(right: 18),
-            child: Center(child: _LocalBadge()),
+            padding: const EdgeInsets.only(right: 18),
+            child: Center(child: _LocalBadge(modelPath: _modelPath)),
           ),
         ],
       ),
@@ -187,32 +263,47 @@ class _PortraitHomePageState extends State<PortraitHomePage> {
 }
 
 class _LocalBadge extends StatelessWidget {
-  const _LocalBadge();
+  const _LocalBadge({required this.modelPath});
+
+  final String? modelPath;
 
   @override
   Widget build(BuildContext context) {
-    final backend = PortraitComputeBackendRegistry.current;
-    final accelerated = backend.isGpuAccelerated;
+    final label = portraitActiveBackendLabel(modelPath);
+    final accelerated = portraitActiveBackendIsAccelerated(modelPath);
+    final isNpu = modelPath != null &&
+        (Uri.tryParse(modelPath!)?.scheme == 'qnn' ||
+            Uri.tryParse(modelPath!)?.scheme == 'dream');
+    final background = isNpu
+        ? const Color(0xFFEDE8FF)
+        : accelerated
+            ? const Color(0xFFE8F2FF)
+            : const Color(0xFFFFF1DA);
+    final foreground = isNpu
+        ? const Color(0xFF5D43D5)
+        : accelerated
+            ? const Color(0xFF2E5EAA)
+            : const Color(0xFF875B1F);
     return Container(
       key: const Key('portrait-compute-backend-badge'),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: accelerated ? const Color(0xFFE8F2FF) : const Color(0xFFFFF1DA),
+        color: background,
         borderRadius: BorderRadius.circular(99),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            accelerated ? Icons.memory_rounded : Icons.warning_amber_rounded,
+            isNpu ? Icons.memory_rounded : accelerated ? Icons.memory_rounded : Icons.warning_amber_rounded,
             size: 13,
-            color: accelerated ? const Color(0xFF3478F6) : const Color(0xFFB77818),
+            color: foreground,
           ),
           const SizedBox(width: 5),
           Text(
-            backend.displayLabel,
+            label,
             style: TextStyle(
-              color: accelerated ? const Color(0xFF2E5EAA) : const Color(0xFF875B1F),
+              color: foreground,
               fontWeight: FontWeight.w800,
               fontSize: 11,
             ),
@@ -239,6 +330,7 @@ class _ModelRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final selected = modelPath != null;
+    final displayName = selected ? portraitActiveModelDisplayName(modelPath!) : null;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 9, 8, 9),
       decoration: BoxDecoration(
@@ -268,7 +360,7 @@ class _ModelRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  selected ? portraitFileName(modelPath!) : '选择或下载 Local-Diffusion 模型',
+                  displayName ?? '选择或下载 Local-Diffusion 模型',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Color(0xFF837C8F), fontSize: 11),

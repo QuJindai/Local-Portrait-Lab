@@ -7,6 +7,7 @@ import 'infrastructure/dream_host_portrait_engine.dart';
 import 'infrastructure/local_diffusion_portrait_engine.dart';
 import 'infrastructure/native_local_diffusion_img2img_bridge.dart';
 import 'infrastructure/native_portrait_io.dart';
+import 'infrastructure/portrait_active_model_store.dart';
 import 'infrastructure/portrait_backend_router_engine.dart';
 import 'infrastructure/portrait_model_downloader.dart';
 import 'infrastructure/standalone_qnn_portrait_engine.dart';
@@ -48,4 +49,7 @@ class PortraitRuntime {
     }
     return NativePortraitModelDownloadService();
   }
+
+  static PortraitActiveModelStore createActiveModelStore() =>
+      FilePortraitActiveModelStore();
 }

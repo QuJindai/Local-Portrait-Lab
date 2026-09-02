@@ -240,7 +240,7 @@ void main() {
             'requestToken': 'r10-token',
           };
         case 'health':
-          return false;
+          return started;
         case 'start':
           started = true;
           return null;

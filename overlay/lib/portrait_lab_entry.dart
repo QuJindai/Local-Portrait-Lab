@@ -19,6 +19,7 @@ void main() {
       photoPicker: SystemPortraitPhotoPicker(),
       modelPicker: SystemPortraitModelPicker(),
       modelDownloader: PortraitRuntime.createModelDownloader(),
+      activeModelStore: PortraitRuntime.createActiveModelStore(),
     ),
   );
 }

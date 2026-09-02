@@ -89,7 +89,11 @@ class MainActivity : FlutterActivity() {
                     val modelDirectory = call.argument<String>("modelDirectory")
                     val backendType = call.argument<String>("backendType") ?: "sdxl"
                     val generationSize = call.argument<Int>("generationSize") ?: 1024
-                    if (modelId.isNullOrBlank() || modelDirectory.isNullOrBlank()) {
+                    val requestToken = call.argument<String>("requestToken")
+                    if (modelId.isNullOrBlank() ||
+                        modelDirectory.isNullOrBlank() ||
+                        requestToken.isNullOrBlank()
+                    ) {
                         result.error("BAD_ARGS", "本机 QNN 启动参数不完整", null)
                         return@setMethodCallHandler
                     }
@@ -106,12 +110,21 @@ class MainActivity : FlutterActivity() {
                             PortraitQnnBackendService.EXTRA_GENERATION_SIZE,
                             generationSize,
                         )
+                        putExtra(
+                            PortraitQnnBackendService.EXTRA_REQUEST_TOKEN,
+                            requestToken,
+                        )
                     }
                     startAsForegroundService(intent)
                     result.success(null)
                 }
 
                 "status" -> result.success(PortraitQnnBackendService.snapshotMap())
+
+                "health" -> {
+                    val modelId = call.argument<String>("modelId")
+                    result.success(PortraitQnnBackendService.health(modelId))
+                }
 
                 "stop" -> {
                     startService(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'application/portrait_generation_controller.dart';
+import 'infrastructure/portrait_active_model_store.dart';
 import 'infrastructure/portrait_model_downloader.dart';
 import 'ui/portrait_home_page.dart';
 import 'ui/portrait_input_picker.dart';
@@ -12,12 +13,14 @@ class PortraitLabApp extends StatelessWidget {
     required this.photoPicker,
     required this.modelPicker,
     this.modelDownloader,
+    this.activeModelStore,
   });
 
   final PortraitGenerationController controller;
   final PortraitPhotoPicker photoPicker;
   final PortraitModelPicker modelPicker;
   final PortraitModelDownloadService? modelDownloader;
+  final PortraitActiveModelStore? activeModelStore;
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +42,7 @@ class PortraitLabApp extends StatelessWidget {
         photoPicker: photoPicker,
         modelPicker: modelPicker,
         modelDownloader: modelDownloader,
+        activeModelStore: activeModelStore,
       ),
     );
   }

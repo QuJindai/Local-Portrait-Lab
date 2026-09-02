@@ -19,12 +19,11 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * R8 standalone QNN backend controller.
+ * Standalone QNN backend controller for Portrait Lab.
  *
- * This mirrors Local Dream's proven BackendService process boundary while
- * binding the native server only to localhost on a dedicated Portrait Lab port
- * (8082). The native binary/runtime are third-party CC BY-NC components bundled
- * only in the R8 research/test build; see THIRD_PARTY_DREAM_QNN_NONCOMMERCIAL.md.
+ * R10 adds a request token to every start so Flutter can never accept a stale
+ * "running" snapshot from a process that is being replaced. Healthy same-model
+ * processes are reused by the Flutter controller instead of restarted.
  */
 class PortraitQnnBackendService : Service() {
     private val executor = Executors.newSingleThreadExecutor { runnable ->
@@ -51,22 +50,37 @@ class PortraitQnnBackendService : Service() {
                 val modelDirectory = intent.getStringExtra(EXTRA_MODEL_DIRECTORY)
                 val backendType = intent.getStringExtra(EXTRA_BACKEND_TYPE) ?: "sdxl"
                 val generationSize = intent.getIntExtra(EXTRA_GENERATION_SIZE, 1024)
-                if (modelId.isNullOrBlank() || modelDirectory.isNullOrBlank()) {
+                val requestToken = intent.getStringExtra(EXTRA_REQUEST_TOKEN)
+                if (modelId.isNullOrBlank() ||
+                    modelDirectory.isNullOrBlank() ||
+                    requestToken.isNullOrBlank()
+                ) {
                     publish(
                         Snapshot(
                             state = "error",
                             modelId = modelId,
+                            requestToken = requestToken,
                             message = "本机 QNN 启动参数不完整",
                         ),
                     )
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                 } else {
+                    // Clear any stale running snapshot synchronously before the
+                    // async worker can kill/restart the previous process.
+                    publish(
+                        Snapshot(
+                            state = "starting",
+                            modelId = modelId,
+                            requestToken = requestToken,
+                        ),
+                    )
                     startBackendAsync(
                         modelId = modelId,
                         modelDirectory = modelDirectory,
                         backendType = backendType,
                         generationSize = generationSize,
+                        requestToken = requestToken,
                     )
                 }
             }
@@ -79,13 +93,13 @@ class PortraitQnnBackendService : Service() {
         modelDirectory: String,
         backendType: String,
         generationSize: Int,
+        requestToken: String,
     ) {
         worker?.cancel(true)
         worker = executor.submit {
             stopping.set(true)
             stopProcess()
             stopping.set(false)
-            publish(Snapshot(state = "starting", modelId = modelId))
 
             try {
                 val modelDir = File(modelDirectory)
@@ -125,16 +139,20 @@ class PortraitQnnBackendService : Service() {
                     environment()["DSP_LIBRARY_PATH"] = runtimeDir.absolutePath
                 }
 
-                Log.i(TAG, "starting standalone QNN model=$modelId type=$backendType size=$generationSize")
+                Log.i(
+                    TAG,
+                    "starting standalone QNN model=$modelId type=$backendType size=$generationSize token=$requestToken",
+                )
                 val started = processBuilder.start()
                 process = started
-                monitorProcess(started, modelId)
+                monitorProcess(started, modelId, requestToken)
                 waitForReady(started)
 
                 publish(
                     Snapshot(
                         state = "running",
                         modelId = modelId,
+                        requestToken = requestToken,
                         port = PORT,
                     ),
                 )
@@ -149,6 +167,7 @@ class PortraitQnnBackendService : Service() {
                         Snapshot(
                             state = "error",
                             modelId = modelId,
+                            requestToken = requestToken,
                             message = error.message ?: error.javaClass.simpleName,
                         ),
                     )
@@ -163,7 +182,7 @@ class PortraitQnnBackendService : Service() {
     private fun stopBackendAsync() {
         stopping.set(true)
         worker?.cancel(true)
-        executor.submit {
+        worker = executor.submit {
             stopProcess()
             publish(Snapshot(state = "idle"))
             stopping.set(false)
@@ -223,19 +242,13 @@ class PortraitQnnBackendService : Service() {
             if (!proc.isAlive) {
                 throw IOException("QNN backend 在就绪前退出，code=${proc.exitValue()}")
             }
-            try {
-                Socket().use { socket ->
-                    socket.connect(InetSocketAddress("127.0.0.1", PORT), 300)
-                    return
-                }
-            } catch (_: IOException) {
-                Thread.sleep(250)
-            }
+            if (socketHealthy()) return
+            Thread.sleep(250)
         }
         throw IOException("QNN backend ${START_TIMEOUT_SECONDS}s 内未监听 127.0.0.1:$PORT")
     }
 
-    private fun monitorProcess(proc: Process, modelId: String) {
+    private fun monitorProcess(proc: Process, modelId: String, requestToken: String) {
         Thread {
             try {
                 proc.inputStream.bufferedReader().useLines { lines ->
@@ -249,6 +262,7 @@ class PortraitQnnBackendService : Service() {
                         Snapshot(
                             state = "error",
                             modelId = modelId,
+                            requestToken = requestToken,
                             message = "QNN backend 退出，code=$exit",
                         ),
                     )
@@ -259,6 +273,7 @@ class PortraitQnnBackendService : Service() {
                         Snapshot(
                             state = "error",
                             modelId = modelId,
+                            requestToken = requestToken,
                             message = "QNN backend monitor: ${error.message}",
                         ),
                     )
@@ -335,12 +350,14 @@ class PortraitQnnBackendService : Service() {
     data class Snapshot(
         val state: String,
         val modelId: String? = null,
+        val requestToken: String? = null,
         val message: String? = null,
         val port: Int? = null,
     ) {
         fun toMap(): Map<String, Any?> = mapOf(
             "state" to state,
             "modelId" to modelId,
+            "requestToken" to requestToken,
             "message" to message,
             "port" to port,
         )
@@ -362,6 +379,7 @@ class PortraitQnnBackendService : Service() {
         const val EXTRA_MODEL_DIRECTORY = "model_directory"
         const val EXTRA_BACKEND_TYPE = "backend_type"
         const val EXTRA_GENERATION_SIZE = "generation_size"
+        const val EXTRA_REQUEST_TOKEN = "request_token"
 
         private val REQUIRED_MODEL_FILES = listOf(
             "config.json",
@@ -382,6 +400,26 @@ class PortraitQnnBackendService : Service() {
 
         private fun publish(value: Snapshot) {
             snapshot = value
+        }
+
+        private fun socketHealthy(): Boolean = try {
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress("127.0.0.1", PORT), 300)
+            }
+            true
+        } catch (_: IOException) {
+            false
+        }
+
+        fun health(modelId: String?): Boolean {
+            val current = snapshot
+            if (modelId.isNullOrBlank() ||
+                current.state != "running" ||
+                current.modelId != modelId
+            ) {
+                return false
+            }
+            return socketHealthy()
         }
 
         fun snapshotMap(): Map<String, Any?> = snapshot.toMap()

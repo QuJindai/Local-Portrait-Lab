@@ -51,16 +51,24 @@ class _PortraitModelsPageState extends State<PortraitModelsPage> {
 
     await for (final state in widget.downloader.download(model)) {
       if (!mounted) return;
+      String? autoSelection;
       setState(() {
         _states[model.id] = state;
         if (state is PortraitModelDownloadCompleted) {
           _installed[model.id] = state.path;
           _activeModelId = null;
+          if (model.usesDreamQnn) {
+            autoSelection = model.standaloneSelectionUri(state.path);
+          }
         } else if (state is PortraitModelDownloadCancelled ||
             state is PortraitModelDownloadFailed) {
           _activeModelId = null;
         }
       });
+      if (autoSelection != null && mounted) {
+        Navigator.of(context).pop(autoSelection);
+        return;
+      }
     }
   }
 
@@ -163,7 +171,7 @@ class _PortraitModelsPageState extends State<PortraitModelsPage> {
                   border: Border.all(color: const Color(0xFFCFE8D5)),
                 ),
                 child: const Text(
-                  '已安装独立 QNN 包：直接点“本机 QNN 生成”，不需要打开 DREAM。只有点“使用 DREAM Host”时才需要 DREAM 主机模式。',
+                  '已安装独立 QNN 包：直接点“本机 QNN 生成”，不需要打开 DREAM。R10 下载完成后会自动激活该模型，并在下次启动继续使用。',
                   style: TextStyle(
                     color: Color(0xFF386846),
                     fontSize: 11.5,
@@ -213,7 +221,7 @@ class _PortraitModelsPageState extends State<PortraitModelsPage> {
               ],
               const SizedBox(height: 8),
               const Text(
-                'QNN 独立模型包约 3.7 GB，解压后约 4.2 GB；下载时建议至少预留 9 GB 临时空间。R8 独立 QNN 运行组件用于研究/测试，DREAM Host 仍可作为备用路径。',
+                'QNN 独立模型包约 3.7 GB，解压后约 4.2 GB；下载时建议至少预留 9 GB 临时空间。独立 QNN 运行组件用于研究/测试，DREAM Host 仍可作为备用路径。',
                 style: TextStyle(
                   color: Color(0xFF8C8495),
                   fontSize: 11,

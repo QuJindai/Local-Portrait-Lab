@@ -46,13 +46,17 @@ abstract interface class StandaloneQnnBackendController {
   Future<void> stop();
 }
 
+typedef StandaloneQnnRequestTokenFactory = String Function();
+
 class AndroidStandaloneQnnBackendController
     implements StandaloneQnnBackendController {
   AndroidStandaloneQnnBackendController({
     MethodChannel? channel,
     this.pollInterval = const Duration(milliseconds: 250),
     this.startTimeout = const Duration(seconds: 90),
-  }) : _channel = channel ?? _defaultChannel;
+    StandaloneQnnRequestTokenFactory? requestTokenFactory,
+  })  : _channel = channel ?? _defaultChannel,
+        _requestTokenFactory = requestTokenFactory;
 
   static const MethodChannel _defaultChannel = MethodChannel(
     'com.qujindai.localportraitlab/qnn_backend',
@@ -61,23 +65,55 @@ class AndroidStandaloneQnnBackendController
   final MethodChannel _channel;
   final Duration pollInterval;
   final Duration startTimeout;
+  final StandaloneQnnRequestTokenFactory? _requestTokenFactory;
+  int _tokenCounter = 0;
+
+  String _nextToken() =>
+      _requestTokenFactory?.call() ??
+      '${DateTime.now().microsecondsSinceEpoch}-${_tokenCounter++}';
+
+  Future<Map<String, dynamic>> _status() async =>
+      await _channel.invokeMapMethod<String, dynamic>('status') ??
+      const <String, dynamic>{'state': 'idle'};
+
+  Future<bool> _health(String modelId) async =>
+      await _channel.invokeMethod<bool>(
+        'health',
+        <String, Object?>{'modelId': modelId},
+      ) ??
+      false;
 
   @override
   Future<void> start(StandaloneQnnBackendStart request) async {
+    final current = await _status();
+    if ((current['state'] ?? '').toString() == 'running' &&
+        current['modelId']?.toString() == request.modelId &&
+        await _health(request.modelId)) {
+      return;
+    }
+
+    final requestToken = _nextToken();
     await _channel.invokeMethod<void>('start', <String, Object?>{
       'modelId': request.modelId,
       'modelDirectory': request.modelDirectory,
       'backendType': request.backendType,
       'generationSize': request.generationSize,
+      'requestToken': requestToken,
     });
 
     final deadline = DateTime.now().add(startTimeout);
     while (DateTime.now().isBefore(deadline)) {
-      final raw = await _channel.invokeMapMethod<String, dynamic>('status') ??
-          const <String, dynamic>{'state': 'idle'};
+      final raw = await _status();
+      final token = raw['requestToken']?.toString();
+      if (token != requestToken) {
+        await Future<void>.delayed(pollInterval);
+        continue;
+      }
       final state = (raw['state'] ?? 'idle').toString();
       final servingModelId = raw['modelId']?.toString();
-      if (state == 'running' && servingModelId == request.modelId) return;
+      if (state == 'running' && servingModelId == request.modelId) {
+        if (await _health(request.modelId)) return;
+      }
       if (state == 'error') {
         throw StandaloneQnnBackendException(
           '本机 QNN 后端启动失败：${raw['message'] ?? 'unknown error'}',
@@ -305,45 +341,55 @@ class StandaloneQnnPortraitEngine implements PortraitGenerationEngine {
   }) async {
     final selection = _parseSelection(request.modelPath);
     final defaults = await _readDmd2Defaults(selection.modelDirectory);
-
-    onState(const PortraitGenerationState.loadingModel());
-    await _backend.start(
-      StandaloneQnnBackendStart(
-        modelId: selection.modelId,
-        modelDirectory: selection.modelDirectory,
-        backendType: selection.backendType,
-        generationSize: selection.generationSize,
-      ),
+    final backendStart = StandaloneQnnBackendStart(
+      modelId: selection.modelId,
+      modelDirectory: selection.modelDirectory,
+      backendType: selection.backendType,
+      generationSize: selection.generationSize,
+    );
+    final generationRequest = StandaloneQnnGenerationRequest(
+      modelId: selection.modelId,
+      portraitPath: request.portraitPath,
+      prompt: request.prompt,
+      negativePrompt: request.negativePrompt,
+      steps: defaults.steps,
+      cfg: defaults.cfg,
+      scheduler: defaults.scheduler,
+      generationSize: selection.generationSize,
+      aspectRatio:
+          '${request.width ~/ _gcd(request.width, request.height)}:${request.height ~/ _gcd(request.width, request.height)}',
+      denoiseStrength: request.strength,
     );
 
-    Uint8List? completed;
-    await for (final event in _transport.generate(
-      StandaloneQnnGenerationRequest(
-        modelId: selection.modelId,
-        portraitPath: request.portraitPath,
-        prompt: request.prompt,
-        negativePrompt: request.negativePrompt,
-        steps: defaults.steps,
-        cfg: defaults.cfg,
-        scheduler: defaults.scheduler,
-        generationSize: selection.generationSize,
-        aspectRatio: '${request.width ~/ _gcd(request.width, request.height)}:${request.height ~/ _gcd(request.width, request.height)}',
-        denoiseStrength: request.strength,
-      ),
-    )) {
-      switch (event) {
-        case StandaloneQnnProgress(:final step, :final steps):
-          onState(PortraitGenerationState.sampling(step: step, steps: steps));
-        case StandaloneQnnComplete(:final pngBytes):
-          completed = pngBytes;
+    onState(const PortraitGenerationState.loadingModel());
+
+    StandaloneQnnBackendException? firstBackendError;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        await _backend.start(backendStart);
+        Uint8List? completed;
+        await for (final event in _transport.generate(generationRequest)) {
+          switch (event) {
+            case StandaloneQnnProgress(:final step, :final steps):
+              onState(PortraitGenerationState.sampling(step: step, steps: steps));
+            case StandaloneQnnComplete(:final pngBytes):
+              completed = pngBytes;
+          }
+        }
+        final png = completed;
+        if (png == null) {
+          throw const StandaloneQnnBackendException('本机 QNN 未返回生成结果。');
+        }
+        return _outputStore.writePng(png);
+      } on StandaloneQnnBackendException catch (error) {
+        firstBackendError ??= error;
+        if (attempt == 1) rethrow;
+        await _transport.cancel();
+        await _backend.stop();
       }
     }
-
-    final png = completed;
-    if (png == null) {
-      throw const StandaloneQnnBackendException('本机 QNN 未返回生成结果。');
-    }
-    return _outputStore.writePng(png);
+    throw firstBackendError ??
+        const StandaloneQnnBackendException('本机 QNN 生成失败。');
   }
 
   @override
