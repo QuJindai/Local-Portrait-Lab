@@ -40,6 +40,25 @@ class _NoopModelPicker implements PortraitModelPicker {
   Future<String?> pickModel() async => null;
 }
 
+class _MemoryActiveModelStore implements PortraitActiveModelStore {
+  _MemoryActiveModelStore(this.value);
+
+  String? value;
+
+  @override
+  Future<String?> loadSelection() async => value;
+
+  @override
+  Future<void> saveSelection(String selection) async {
+    value = selection;
+  }
+
+  @override
+  Future<void> clearSelection() async {
+    value = null;
+  }
+}
+
 class _InstalledCyberDownloader implements PortraitModelDownloadService {
   _InstalledCyberDownloader({this.completeOnDownload = false});
 
@@ -131,14 +150,9 @@ void main() {
 
   testWidgets('R10 home restores installed QNN model and shows real NPU backend',
       (tester) async {
-    final root = await Directory.systemTemp.createTemp('portrait-r10-home-');
-    addTearDown(() => root.delete(recursive: true));
-    final store = FilePortraitActiveModelStore(
-      rootDirectoryProvider: () async => root,
-    );
     const selection =
         'qnn://standalone?model_id=cyber_realistic_v10_dmd2&path=%2Fmodels%2Fcyber_realistic_v10_dmd2_qnn&type=sdxl&size=1024';
-    await store.saveSelection(selection);
+    final store = _MemoryActiveModelStore(selection);
     final controller = PortraitGenerationController(_IdleEngine());
     addTearDown(controller.dispose);
 
@@ -151,7 +165,9 @@ void main() {
         activeModelStore: store,
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.pump();
 
     expect(find.text('CyberRealistic v10 DMD2'), findsOneWidget);
     expect(find.text('NPU · QNN/HTP'), findsOneWidget);
