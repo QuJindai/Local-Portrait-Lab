@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'application/portrait_generation_controller.dart';
+import 'infrastructure/android_portrait_model_downloader.dart';
 import 'infrastructure/dream_host_accelerator.dart';
 import 'infrastructure/dream_host_portrait_engine.dart';
 import 'infrastructure/local_diffusion_portrait_engine.dart';
@@ -33,6 +36,9 @@ class PortraitRuntime {
   }
 
   static PortraitModelDownloadService createModelDownloader() {
+    if (Platform.isAndroid) {
+      return AndroidPortraitModelDownloadService();
+    }
     return NativePortraitModelDownloadService();
   }
 }
