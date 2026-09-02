@@ -39,8 +39,26 @@ class PortraitModelSpec {
   final String? dreamModelId;
 
   bool get usesDreamQnn => backend == PortraitModelBackend.dreamQnnSdxl;
+
   String? get dreamSelectionUri =>
       dreamModelId == null ? null : 'dream://${dreamModelId!}';
+
+  String? standaloneSelectionUri(String installedPath) {
+    final modelId = dreamModelId;
+    if (!usesDreamQnn || modelId == null || installedPath.trim().isEmpty) {
+      return null;
+    }
+    return Uri(
+      scheme: 'qnn',
+      host: 'standalone',
+      queryParameters: <String, String>{
+        'model_id': modelId,
+        'path': installedPath,
+        'type': 'sdxl',
+        'size': '$generationSize',
+      },
+    ).toString();
+  }
 }
 
 class PortraitModelCatalog {
@@ -50,7 +68,7 @@ class PortraitModelCatalog {
     PortraitModelSpec(
       id: 'illustrious_v16_dmd2_qnn',
       displayName: 'Illustrious v16 DMD2',
-      description: 'DREAM 同源极速模型 · SDXL/QNN/HTP · 1024×1024 · DMD2。DREAM 已下载时可直接复用，无需重复占用 4GB。',
+      description: 'DREAM 同源极速模型 · SDXL/QNN/HTP · 1024×1024 · DMD2。下载独立包后可直接在 Portrait Lab 本机 NPU 运行；DREAM Host 仅作为可选复用路径。',
       sourceLabel: 'Hugging Face · xororz/sdxl-qnn',
       licenseLabel: 'Model package · see upstream model card',
       format: 'QNN SDXL ZIP',
@@ -68,7 +86,7 @@ class PortraitModelCatalog {
     PortraitModelSpec(
       id: 'cyber_realistic_v10_dmd2_qnn',
       displayName: 'CyberRealistic v10 DMD2',
-      description: 'DREAM 同源写实极速模型 · SDXL/QNN/HTP · 1024×1024 · DMD2。DREAM 已下载时可直接复用。',
+      description: 'DREAM 同源写实极速模型 · SDXL/QNN/HTP · 1024×1024 · DMD2。独立包安装后优先本机 QNN 直跑，无需开启 DREAM Host。',
       sourceLabel: 'Hugging Face · xororz/sdxl-qnn',
       licenseLabel: 'Model package · see upstream model card',
       format: 'QNN SDXL ZIP',
