@@ -13,10 +13,15 @@ on:
 permissions:
   contents: read
 
+env:
+  LOCAL_DREAM_SHA: a7666f6198412a58c6eb1eacc28828aa40c7d7ae
+  NDK_VERSION: 28.2.13676358
+  QAIRT_URL: https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/2.39.0.250926/v2.39.0.250926.zip
+
 jobs:
   portrait-domain:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,7 +39,7 @@ jobs:
       - name: Verify Portrait Lab Android identity and storage policy
         run: bash scripts/verify_portrait_android.sh _build/local-diffusion
 
-      - name: Verify localhost-only DREAM network policy
+      - name: Verify localhost-only network policy
         shell: bash
         run: |
           MANIFEST=_build/local-diffusion/android/app/src/main/AndroidManifest.xml
@@ -61,45 +66,154 @@ jobs:
           grep -F 'com.qujindai.localportraitlab/model_download' "$ACTIVITY"
           echo R7_NATIVE_DOWNLOAD_CONTRACT_PASS
 
+      - name: Verify R8 standalone QNN source contract
+        shell: bash
+        run: |
+          SERVICE=_build/local-diffusion/android/app/src/main/kotlin/com/qujindai/localportraitlab/PortraitQnnBackendService.kt
+          ACTIVITY=_build/local-diffusion/android/app/src/main/kotlin/com/qujindai/localportraitlab/MainActivity.kt
+          MANIFEST=_build/local-diffusion/android/app/src/main/AndroidManifest.xml
+          ROUTER=_build/local-diffusion/lib/portrait_lab/infrastructure/portrait_backend_router_engine.dart
+          grep -F 'PortraitQnnBackendService' "$MANIFEST"
+          grep -F 'com.qujindai.localportraitlab/qnn_backend' "$ACTIVITY"
+          grep -F 'libstable_diffusion_core.so' "$SERVICE"
+          grep -F '127.0.0.1' "$SERVICE"
+          grep -F '8082' "$SERVICE"
+          grep -F 'DSP_LIBRARY_PATH' "$SERVICE"
+          grep -F "'qnn' => _standaloneQnnEngine" "$ROUTER"
+          test -s THIRD_PARTY_DREAM_QNN_NONCOMMERCIAL.md
+          echo R8_STANDALONE_QNN_SOURCE_CONTRACT_PASS
+
       - name: Resolve Flutter packages
         working-directory: _build/local-diffusion
         run: flutter pub get
 
-      - name: Verify portrait domain, R7 native downloads, DREAM QNN and fallback tests
+      - name: Verify portrait domain, native downloads and three backend routes
         working-directory: _build/local-diffusion
         shell: bash
-        run: |
-          if [[ -d test/portrait_lab ]]; then
-            flutter test test/portrait_lab
-          else
-            echo "No portrait tests committed yet; bootstrap baseline only."
-          fi
+        run: flutter test test/portrait_lab
 
-      - name: Build Portrait Lab R7 native-download debug APK
-        working-directory: _build/local-diffusion
-        run: flutter build apk --debug --target lib/portrait_lab_entry.dart --build-name=0.7.0-r7 --build-number=7
-
-      - name: Verify Vulkan fallback runtime is bundled
+      - name: Prepare Android native build environment
         shell: bash
         run: |
+          set -euo pipefail
+          sdkmanager --channel=3 "ndk;${NDK_VERSION}"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ninja-build ccache
+          rustup target add aarch64-linux-android
+          test -d "$ANDROID_HOME/ndk/$NDK_VERSION"
+
+      - name: Clone pinned Local Dream QNN source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf third_party/local-dream
+          mkdir -p third_party
+          git clone --recursive https://github.com/xororz/local-dream.git third_party/local-dream
+          cd third_party/local-dream
+          git checkout "$LOCAL_DREAM_SHA"
+          git submodule update --init --recursive
+          test "$(git rev-parse HEAD)" = "$LOCAL_DREAM_SHA"
+
+      - name: Apply pinned tokenizers Rust compatibility patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUST_FILE=third_party/local-dream/app/src/main/cpp/3rdparty/tokenizers-cpp/rust/src/lib.rs
+          python3 - "$RUST_FILE" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          s = p.read_text(encoding='utf-8')
+          repls = {
+              '*out_len = (*handle).decode_str.len();':
+                  '*out_len = (&(*handle).decode_str).len();',
+              '*out_len = (*handle).id_to_token_result.len();':
+                  '*out_len = (&(*handle).id_to_token_result).len();',
+          }
+          for old, new in repls.items():
+              count = s.count(old)
+              if count != 1:
+                  raise SystemExit(f'rust compatibility anchor mismatch: {old!r}, count={count}')
+              s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+          print('TOKENIZERS_RUST_COMPAT_PATCH_PASS')
+          PY
+          grep -Fq '(&(*handle).decode_str).len()' "$RUST_FILE"
+          grep -Fq '(&(*handle).id_to_token_result).len()' "$RUST_FILE"
+
+      - name: Download QAIRT Community SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/qairt /tmp/qairt.zip
+          mkdir -p /tmp/qairt
+          curl -L --fail --retry 4 --retry-all-errors "$QAIRT_URL" -o /tmp/qairt.zip
+          unzip -q /tmp/qairt.zip -d /tmp/qairt
+          HEADER="$(find /tmp/qairt -type f -path '*/include/QNN/QnnTypes.h' -print -quit)"
+          test -n "$HEADER"
+          QNN_ROOT="$(dirname "$(dirname "$(dirname "$HEADER")")")"
+          test -s "$QNN_ROOT/lib/aarch64-android/libQnnHtp.so"
+          echo "QNN_SDK_ROOT=$QNN_ROOT" >> "$GITHUB_ENV"
+
+      - name: Build pinned Local Dream QNN native core
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/$NDK_VERSION"
+          export QNN_SDK_ROOT="$QNN_SDK_ROOT"
+          cd third_party/local-dream/app/src/main/cpp
+          bash build.sh 2>&1 | tee ../../../../../qnn-native-r8.log
+          CORE=../jniLibs/arm64-v8a/libstable_diffusion_core.so
+          test -s "$CORE"
+          test -s ../assets/qnnlibs/libQnnHtp.so
+
+      - name: Stage standalone QNN core into Portrait Lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP=_build/local-diffusion/android/app/src/main
+          mkdir -p "$APP/jniLibs/arm64-v8a" "$APP/assets"
+          cp third_party/local-dream/app/src/main/jniLibs/arm64-v8a/libstable_diffusion_core.so \
+            "$APP/jniLibs/arm64-v8a/libstable_diffusion_core.so"
+          rm -rf "$APP/assets/qnnlibs"
+          cp -R third_party/local-dream/app/src/main/assets/qnnlibs "$APP/assets/qnnlibs"
+          test -s "$APP/jniLibs/arm64-v8a/libstable_diffusion_core.so"
+          test -s "$APP/assets/qnnlibs/libQnnHtp.so"
+          echo R8_QNN_NATIVE_STAGE_PASS
+
+      - name: Build Portrait Lab R8 standalone-QNN debug APK
+        working-directory: _build/local-diffusion
+        run: flutter build apk --debug --target lib/portrait_lab_entry.dart --build-name=0.8.0-r8 --build-number=8
+
+      - name: Verify standalone QNN and fallback runtimes are bundled
+        shell: bash
+        run: |
+          set -euo pipefail
           APK=_build/local-diffusion/build/app/outputs/flutter-apk/app-debug.apk
-          unzip -l "$APK" | grep -F 'lib/arm64-v8a/libstable-diffusion_vulkan.so'
-          unzip -l "$APK" | grep -F 'lib/arm64-v8a/libstable-diffusion.so'
+          zipinfo -1 "$APK" > /tmp/r8-apk-files.txt
+          grep -Fx 'lib/arm64-v8a/libstable_diffusion_core.so' /tmp/r8-apk-files.txt
+          grep -Fx 'lib/arm64-v8a/libstable-diffusion_vulkan.so' /tmp/r8-apk-files.txt
+          grep -Fx 'lib/arm64-v8a/libstable-diffusion.so' /tmp/r8-apk-files.txt
+          grep -F 'assets/qnnlibs/libQnnHtp.so' /tmp/r8-apk-files.txt
+          echo R8_APK_RUNTIME_BUNDLE_PASS
 
-      - name: Stage R7 APK
+      - name: Stage R8 APK
         shell: bash
         run: |
           mkdir -p dist
           cp _build/local-diffusion/build/app/outputs/flutter-apk/app-debug.apk \
-            dist/Local-Portrait-Lab_R7_NATIVE_DOWNLOAD_debug.apk
-          sha256sum dist/Local-Portrait-Lab_R7_NATIVE_DOWNLOAD_debug.apk | tee dist/Local-Portrait-Lab_R7_NATIVE_DOWNLOAD_debug.sha256
+            dist/Local-Portrait-Lab_R8_STANDALONE_QNN_debug.apk
+          sha256sum dist/Local-Portrait-Lab_R8_STANDALONE_QNN_debug.apk | tee dist/Local-Portrait-Lab_R8_STANDALONE_QNN_debug.sha256
+          cp THIRD_PARTY_DREAM_QNN_NONCOMMERCIAL.md dist/
 
-      - name: Upload Portrait Lab R7 APK
+      - name: Upload Portrait Lab R8 APK
         uses: actions/upload-artifact@v4
         with:
-          name: Local-Portrait-Lab_R7_NATIVE_DOWNLOAD_debug
+          name: Local-Portrait-Lab_R8_STANDALONE_QNN_debug
           path: |
-            dist/Local-Portrait-Lab_R7_NATIVE_DOWNLOAD_debug.apk
-            dist/Local-Portrait-Lab_R7_NATIVE_DOWNLOAD_debug.sha256
+            dist/Local-Portrait-Lab_R8_STANDALONE_QNN_debug.apk
+            dist/Local-Portrait-Lab_R8_STANDALONE_QNN_debug.sha256
+            dist/THIRD_PARTY_DREAM_QNN_NONCOMMERCIAL.md
+            qnn-native-r8.log
           if-no-files-found: error
           retention-days: 14
