@@ -1,4 +1,5 @@
 const qnnSdxlRequiredFiles = <String>[
+  'config.json',
   'tokenizer.json',
   'clip.mnn',
   'pos_emb.bin',
