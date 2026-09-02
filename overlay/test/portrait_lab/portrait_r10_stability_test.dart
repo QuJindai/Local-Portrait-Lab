@@ -255,6 +255,7 @@ void main() {
     final controller = AndroidStandaloneQnnBackendController(
       channel: channel,
       pollInterval: Duration.zero,
+      startTimeout: const Duration(milliseconds: 200),
       requestTokenFactory: () => 'r10-token',
     );
 
@@ -298,6 +299,7 @@ void main() {
     final controller = AndroidStandaloneQnnBackendController(
       channel: channel,
       pollInterval: Duration.zero,
+      startTimeout: const Duration(milliseconds: 200),
       requestTokenFactory: () => 'unused-token',
     );
     await controller.start(
