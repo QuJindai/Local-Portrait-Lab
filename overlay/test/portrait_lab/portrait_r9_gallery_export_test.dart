@@ -111,6 +111,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(exporter.exportedPaths, <String>['/tmp/generated.png']);
+    await tester.drag(find.byType(ListView), const Offset(0, -1000));
+    await tester.pumpAndSettle();
+
     expect(find.textContaining('已保存到系统相册'), findsOneWidget);
     expect(find.textContaining('Pictures/Portrait Lab'), findsWidgets);
     expect(find.byKey(const Key('portrait-open-gallery-result')), findsOneWidget);
@@ -147,6 +150,8 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -1000));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('生成成功，但保存到相册失败'), findsOneWidget);
