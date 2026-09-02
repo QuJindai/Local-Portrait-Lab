@@ -6,11 +6,14 @@ class PortraitBackendRouterEngine implements PortraitGenerationEngine {
   PortraitBackendRouterEngine({
     required PortraitGenerationEngine stableEngine,
     required PortraitGenerationEngine dreamEngine,
+    required PortraitGenerationEngine standaloneQnnEngine,
   })  : _stableEngine = stableEngine,
-        _dreamEngine = dreamEngine;
+        _dreamEngine = dreamEngine,
+        _standaloneQnnEngine = standaloneQnnEngine;
 
   final PortraitGenerationEngine _stableEngine;
   final PortraitGenerationEngine _dreamEngine;
+  final PortraitGenerationEngine _standaloneQnnEngine;
   PortraitGenerationEngine? _active;
 
   @override
@@ -18,9 +21,11 @@ class PortraitBackendRouterEngine implements PortraitGenerationEngine {
     PortraitGenerationRequest request, {
     required void Function(PortraitGenerationState state) onState,
   }) async {
-    final engine = request.modelPath.startsWith('dream://')
-        ? _dreamEngine
-        : _stableEngine;
+    final engine = switch (Uri.tryParse(request.modelPath)?.scheme) {
+      'dream' => _dreamEngine,
+      'qnn' => _standaloneQnnEngine,
+      _ => _stableEngine,
+    };
     _active = engine;
     try {
       return await engine.generate(request, onState: onState);
