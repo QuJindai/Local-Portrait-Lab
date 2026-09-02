@@ -129,24 +129,33 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
     );
     final runtimeProfile = LocalDiffusionRuntimeProfile.forRequest(request);
     final computeBackend = PortraitComputeBackendRegistry.current;
-    final usingDream = widget.modelPath.startsWith('dream://');
+    final modelScheme = Uri.tryParse(widget.modelPath)?.scheme;
+    final usingDream = modelScheme == 'dream';
+    final usingStandaloneQnn = modelScheme == 'qnn';
+    final usingQnn = usingDream || usingStandaloneQnn;
     final hasSamplingProgress = _steps > 0;
     final progress = hasSamplingProgress ? (_step / _steps).clamp(0.0, 1.0) : null;
     final percent = progress == null ? null : (progress * 100).round();
     final currentStage = _stageIndex();
     final elapsedSeconds = _stopwatch.elapsedMilliseconds / 1000.0;
 
-    final backendTitle = usingDream
-        ? 'DREAM NPU 本地生成'
-        : computeBackend.isGpuAccelerated
-            ? 'GPU 本地生成'
-            : '本地生成 · CPU 回退';
-    final diagnosticLabel = usingDream
-        ? 'NPU · QNN/HTP · DREAM FastPath'
-        : '${computeBackend.displayLabel} · ${runtimeProfile.isFastPath ? 'LCM FAST · ' : ''}${runtimeProfile.label}';
-    final diagnosticDetail = usingDream
-        ? '127.0.0.1:8081 · SDXL 1024 → 3:4 · 已运行 ${elapsedSeconds.toStringAsFixed(1)}s'
-        : '${computeBackend.detailLabel} · 中心裁剪 ${request.width}×${request.height} RGB · 已运行 ${elapsedSeconds.toStringAsFixed(1)}s';
+    final backendTitle = usingStandaloneQnn
+        ? '本机 QNN NPU 生成'
+        : usingDream
+            ? 'DREAM Host NPU 生成'
+            : computeBackend.isGpuAccelerated
+                ? 'GPU 本地生成'
+                : '本地生成 · CPU 回退';
+    final diagnosticLabel = usingStandaloneQnn
+        ? 'NPU · QNN/HTP · Portrait Lab Standalone'
+        : usingDream
+            ? 'NPU · QNN/HTP · DREAM Host'
+            : '${computeBackend.displayLabel} · ${runtimeProfile.isFastPath ? 'LCM FAST · ' : ''}${runtimeProfile.label}';
+    final diagnosticDetail = usingStandaloneQnn
+        ? '127.0.0.1:8082 · SDXL 1024 → 3:4 · 已运行 ${elapsedSeconds.toStringAsFixed(1)}s'
+        : usingDream
+            ? '127.0.0.1:8081 · SDXL 1024 → 3:4 · 已运行 ${elapsedSeconds.toStringAsFixed(1)}s'
+            : '${computeBackend.detailLabel} · 中心裁剪 ${request.width}×${request.height} RGB · 已运行 ${elapsedSeconds.toStringAsFixed(1)}s';
 
     return Scaffold(
       appBar: AppBar(
@@ -205,7 +214,7 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
                       child: Icon(
                         _cancelled
                             ? Icons.stop_rounded
-                            : usingDream
+                            : usingQnn
                                 ? Icons.bolt_rounded
                                 : Icons.auto_awesome_rounded,
                         size: 39,
@@ -231,7 +240,7 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
               key: const Key('portrait-runtime-diagnostics'),
               padding: const EdgeInsets.all(13),
               decoration: BoxDecoration(
-                color: usingDream
+                color: usingQnn
                     ? const Color(0xFFEDE8FF)
                     : computeBackend.isGpuAccelerated
                         ? const Color(0xFFE8F2FF)
@@ -244,14 +253,14 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
-                    usingDream
+                    usingQnn
                         ? Icons.bolt_rounded
                         : computeBackend.isGpuAccelerated
                             ? Icons.memory_rounded
                             : runtimeProfile.isFastPath
                                 ? Icons.bolt_rounded
                                 : Icons.speed_rounded,
-                    color: usingDream
+                    color: usingQnn
                         ? const Color(0xFF6D4CF5)
                         : computeBackend.isGpuAccelerated
                             ? const Color(0xFF3478F6)
@@ -299,7 +308,11 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
                   const _StageConnector(),
                   _StageRow(
                     title: '构建人像形象',
-                    subtitle: usingDream ? '启动 DREAM QNN/HTP 模型' : '加载本地模型',
+                    subtitle: usingStandaloneQnn
+                        ? '启动 Portrait Lab 本机 QNN/HTP 模型'
+                        : usingDream
+                            ? '连接 DREAM Host QNN/HTP 模型'
+                            : '加载本地模型',
                     state: _stageState(1, currentStage),
                   ),
                   const _StageConnector(),
@@ -367,9 +380,11 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
             ),
             const SizedBox(height: 10),
             Text(
-              usingDream
-                  ? 'R6 通过本机 localhost 调用 DREAM QNN/HTP；照片和结果不离开设备。'
-                  : 'R6 fallback 展示实际 FFI backend；GPU · Vulkan 表示推理 isolate 也加载 Vulkan。',
+              usingStandaloneQnn
+                  ? 'R8 由 Portrait Lab 自己启动本机 QNN/HTP 后端（127.0.0.1:8082）；不需要开启 DREAM Host。'
+                  : usingDream
+                      ? 'DREAM Host 为可选兼容路径（127.0.0.1:8081）；照片和结果仍不离开设备。'
+                      : 'R8 fallback 展示实际 FFI backend；GPU · Vulkan 表示推理 isolate 也加载 Vulkan。',
               textAlign: TextAlign.center,
               style: const TextStyle(color: Color(0xFF96909F), fontSize: 10.5),
             ),
