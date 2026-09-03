@@ -9,6 +9,7 @@ import java.util.concurrent.Executors
 
 class MainActivity : FlutterActivity() {
     private val galleryExecutor = Executors.newSingleThreadExecutor()
+    private val qnnExecutor = Executors.newSingleThreadExecutor()
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -123,7 +124,14 @@ class MainActivity : FlutterActivity() {
 
                 "health" -> {
                     val modelId = call.argument<String>("modelId")
-                    result.success(PortraitQnnBackendService.health(modelId))
+                    qnnExecutor.execute {
+                        val healthy = try {
+                            PortraitQnnBackendService.health(modelId)
+                        } catch (_: Exception) {
+                            false
+                        }
+                        runOnUiThread { result.success(healthy) }
+                    }
                 }
 
                 "stop" -> {
@@ -201,6 +209,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        qnnExecutor.shutdownNow()
         galleryExecutor.shutdownNow()
         super.onDestroy()
     }
