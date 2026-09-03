@@ -25,6 +25,7 @@ class _PortraitModelsPageState extends State<PortraitModelsPage> {
   final Map<String, PortraitModelDownloadState> _states =
       <String, PortraitModelDownloadState>{};
   String? _activeModelId;
+  String _downloadSource = 'official';
 
   @override
   void initState() {
@@ -178,6 +179,50 @@ class _PortraitModelsPageState extends State<PortraitModelsPage> {
                     height: 1.45,
                     fontWeight: FontWeight.w600,
                   ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFFE5E1EA)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '模型下载源',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      '参考 DREAM：默认使用官方源；国内网络可切换 hf-mirror。',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF81798A)),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ChoiceChip(
+                          key: const Key('download-source-official'),
+                          label: const Text('Hugging Face 官方'),
+                          selected: _downloadSource == 'official',
+                          onSelected: (_) =>
+                              setState(() => _downloadSource = 'official'),
+                        ),
+                        ChoiceChip(
+                          key: const Key('download-source-hf-mirror'),
+                          label: const Text('hf-mirror 国内镜像'),
+                          selected: _downloadSource == 'hf-mirror',
+                          onSelected: (_) =>
+                              setState(() => _downloadSource = 'hf-mirror'),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 18),
