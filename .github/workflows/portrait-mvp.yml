@@ -131,11 +131,26 @@ jobs:
           grep -F 'createActiveModelStore' "$ENTRY"
           echo R10_STABILITY_CONTRACT_PASS
 
+      - name: Verify R10.1 official and hf-mirror download-source contract
+        shell: bash
+        run: |
+          SOURCE=_build/local-diffusion/lib/portrait_lab/infrastructure/portrait_download_source.dart
+          PAGE=_build/local-diffusion/lib/portrait_lab/ui/portrait_models_page.dart
+          DOWNLOADER=_build/local-diffusion/lib/portrait_lab/infrastructure/android_portrait_model_downloader.dart
+          grep -F 'download_source.txt' "$SOURCE"
+          grep -F "'huggingface.co'" "$SOURCE"
+          grep -F "'hf-mirror.com'" "$SOURCE"
+          grep -F 'Hugging Face 官方' "$PAGE"
+          grep -F 'hf-mirror 国内镜像' "$PAGE"
+          grep -F 'PortraitDownloadSourceDefaults.load()' "$DOWNLOADER"
+          grep -F 'source.resolveUrl(model.downloadUrl)' "$DOWNLOADER"
+          echo R10_1_DOWNLOAD_SOURCE_CONTRACT_PASS
+
       - name: Resolve Flutter packages
         working-directory: _build/local-diffusion
         run: flutter pub get
 
-      - name: Verify portrait domain, R10 stability, gallery, downloads and backend routes
+      - name: Verify portrait domain, R10.1 mirror, stability, gallery and backends
         working-directory: _build/local-diffusion
         shell: bash
         run: flutter test test/portrait_lab
@@ -152,7 +167,7 @@ jobs:
           sudo mkdir -p /data
           sudo ln -sfn "$ANDROID_HOME/ndk/$NDK_VERSION" /data/android-ndk-r28
           test -f /data/android-ndk-r28/build/cmake/android.toolchain.cmake
-          echo R10_PINNED_NDK_COMPAT_PATH_PASS
+          echo R10_1_PINNED_NDK_COMPAT_PATH_PASS
 
       - name: Clone pinned Local Dream QNN source
         shell: bash
@@ -211,7 +226,7 @@ jobs:
           test -d /data/qairt/2.39.0.250926/examples/QNN/SampleApp/SampleApp
           test -s /data/qairt/2.39.0.250926/lib/aarch64-android/libQnnHtp.so
           echo "QNN_SDK_ROOT=$QNN_ROOT" >> "$GITHUB_ENV"
-          echo R10_PINNED_QAIRT_COMPAT_PATH_PASS
+          echo R10_1_PINNED_QAIRT_COMPAT_PATH_PASS
 
       - name: Build pinned Local Dream QNN native core
         shell: bash
@@ -219,7 +234,7 @@ jobs:
           set -euo pipefail
           export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/$NDK_VERSION"
           cd third_party/local-dream/app/src/main/cpp
-          bash build.sh 2>&1 | tee ../../../../../../qnn-native-r10.log
+          bash build.sh 2>&1 | tee ../../../../../../qnn-native-r10_1.log
           CORE=../jniLibs/arm64-v8a/libstable_diffusion_core.so
           test -s "$CORE"
           test -s ../assets/qnnlibs/libQnnHtp.so
@@ -229,16 +244,16 @@ jobs:
         shell: bash
         run: |
           echo '===== QNN NATIVE FAILURE TAIL ====='
-          tail -n 240 qnn-native-r10.log || true
+          tail -n 240 qnn-native-r10_1.log || true
           echo '===== END QNN NATIVE FAILURE TAIL ====='
 
       - name: Upload QNN native diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: r10-qnn-native-diagnostics
+          name: r10-1-qnn-native-diagnostics
           path: |
-            qnn-native-r10.log
+            qnn-native-r10_1.log
             third_party/local-dream/app/src/main/cpp/build/**/CMakeCache.txt
             third_party/local-dream/app/src/main/cpp/build/**/CMakeFiles/CMakeOutput.log
             third_party/local-dream/app/src/main/cpp/build/**/CMakeFiles/CMakeError.log
@@ -257,41 +272,41 @@ jobs:
           cp -R third_party/local-dream/app/src/main/assets/qnnlibs "$APP/assets/qnnlibs"
           test -s "$APP/jniLibs/arm64-v8a/libstable_diffusion_core.so"
           test -s "$APP/assets/qnnlibs/libQnnHtp.so"
-          echo R10_QNN_NATIVE_STAGE_PASS
+          echo R10_1_QNN_NATIVE_STAGE_PASS
 
-      - name: Build Portrait Lab R10 stability-QNN debug APK
+      - name: Build Portrait Lab R10.1 mirror-QNN debug APK
         working-directory: _build/local-diffusion
-        run: flutter build apk --debug --target lib/portrait_lab_entry.dart --build-name=0.10.0-r10 --build-number=10
+        run: flutter build apk --debug --target lib/portrait_lab_entry.dart --build-name=0.10.1-r10.1 --build-number=11
 
       - name: Verify QNN and fallback runtimes are bundled
         shell: bash
         run: |
           set -euo pipefail
           APK=_build/local-diffusion/build/app/outputs/flutter-apk/app-debug.apk
-          zipinfo -1 "$APK" > /tmp/r10-apk-files.txt
-          grep -Fx 'lib/arm64-v8a/libstable_diffusion_core.so' /tmp/r10-apk-files.txt
-          grep -Fx 'lib/arm64-v8a/libstable-diffusion_vulkan.so' /tmp/r10-apk-files.txt
-          grep -Fx 'lib/arm64-v8a/libstable-diffusion.so' /tmp/r10-apk-files.txt
-          grep -F 'assets/qnnlibs/libQnnHtp.so' /tmp/r10-apk-files.txt
-          echo R10_APK_RUNTIME_BUNDLE_PASS
+          zipinfo -1 "$APK" > /tmp/r10_1-apk-files.txt
+          grep -Fx 'lib/arm64-v8a/libstable_diffusion_core.so' /tmp/r10_1-apk-files.txt
+          grep -Fx 'lib/arm64-v8a/libstable-diffusion_vulkan.so' /tmp/r10_1-apk-files.txt
+          grep -Fx 'lib/arm64-v8a/libstable-diffusion.so' /tmp/r10_1-apk-files.txt
+          grep -F 'assets/qnnlibs/libQnnHtp.so' /tmp/r10_1-apk-files.txt
+          echo R10_1_APK_RUNTIME_BUNDLE_PASS
 
-      - name: Stage R10 APK
+      - name: Stage R10.1 APK
         shell: bash
         run: |
           mkdir -p dist
           cp _build/local-diffusion/build/app/outputs/flutter-apk/app-debug.apk \
-            dist/Local-Portrait-Lab_R10_STABILITY_QNN_debug.apk
-          sha256sum dist/Local-Portrait-Lab_R10_STABILITY_QNN_debug.apk | tee dist/Local-Portrait-Lab_R10_STABILITY_QNN_debug.sha256
+            dist/Local-Portrait-Lab_R10_1_HF_MIRROR_QNN_debug.apk
+          sha256sum dist/Local-Portrait-Lab_R10_1_HF_MIRROR_QNN_debug.apk | tee dist/Local-Portrait-Lab_R10_1_HF_MIRROR_QNN_debug.sha256
           cp THIRD_PARTY_DREAM_QNN_NONCOMMERCIAL.md dist/
 
-      - name: Upload Portrait Lab R10 APK
+      - name: Upload Portrait Lab R10.1 APK
         uses: actions/upload-artifact@v4
         with:
-          name: Local-Portrait-Lab_R10_STABILITY_QNN_debug
+          name: Local-Portrait-Lab_R10_1_HF_MIRROR_QNN_debug
           path: |
-            dist/Local-Portrait-Lab_R10_STABILITY_QNN_debug.apk
-            dist/Local-Portrait-Lab_R10_STABILITY_QNN_debug.sha256
+            dist/Local-Portrait-Lab_R10_1_HF_MIRROR_QNN_debug.apk
+            dist/Local-Portrait-Lab_R10_1_HF_MIRROR_QNN_debug.sha256
             dist/THIRD_PARTY_DREAM_QNN_NONCOMMERCIAL.md
-            qnn-native-r10.log
+            qnn-native-r10_1.log
           if-no-files-found: error
           retention-days: 14
