@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../domain/portrait_model.dart';
+import 'portrait_download_source.dart';
 import 'portrait_model_downloader.dart';
 import 'qnn_model_layout.dart';
 
@@ -67,12 +68,14 @@ class AndroidPortraitModelDownloadService implements PortraitModelDownloadServic
     }
 
     final directory = await _modelsDirectory();
+    final source = await PortraitDownloadSourceDefaults.load();
+    final resolvedDownloadUrl = source.resolveUrl(model.downloadUrl);
     _cancelRequested = false;
 
     await _channel.invokeMethod<void>('start', <String, Object?>{
       'modelId': model.id,
       'modelName': model.displayName,
-      'url': model.downloadUrl,
+      'url': resolvedDownloadUrl,
       'fileName': model.fileName,
       'destinationRoot': directory.path,
       'isArchive': model.isArchive,
