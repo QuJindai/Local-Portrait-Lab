@@ -100,6 +100,18 @@ class PortraitDownloadSourceDefaults {
   static final PortraitDownloadSourceStore _androidStore =
       FilePortraitDownloadSourceStore();
 
+  static PortraitDownloadSource current = PortraitDownloadSource.official;
+
   static PortraitDownloadSourceStore get store =>
       Platform.isAndroid ? _androidStore : _nonAndroidStore;
+
+  static Future<PortraitDownloadSource> load() async {
+    current = await store.load();
+    return current;
+  }
+
+  static Future<void> save(PortraitDownloadSource source) async {
+    current = source;
+    await store.save(source);
+  }
 }
