@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_diffusion/portrait_lab/domain/portrait_model.dart';
 import 'package:local_diffusion/portrait_lab/infrastructure/android_portrait_model_downloader.dart';
+import 'package:local_diffusion/portrait_lab/infrastructure/portrait_download_source.dart';
 import 'package:local_diffusion/portrait_lab/infrastructure/portrait_model_downloader.dart';
 
 void main() {
@@ -18,6 +19,7 @@ void main() {
     calls.clear();
     statusQueue.clear();
     root = await Directory.systemTemp.createTemp('portrait-android-download-');
+    await PortraitDownloadSourceDefaults.save(PortraitDownloadSource.official);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
       calls.add(call);
@@ -36,6 +38,7 @@ void main() {
   });
 
   tearDown(() async {
+    await PortraitDownloadSourceDefaults.save(PortraitDownloadSource.official);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
     if (await root.exists()) await root.delete(recursive: true);
@@ -84,6 +87,33 @@ void main() {
     expect(args['isArchive'], isTrue);
     expect(args['destinationRoot'], modelsRoot);
     expect(args['requiredFiles'], isA<List<Object?>>());
+  });
+
+  test('R10.1 hf-mirror selection rewrites the actual native download URL',
+      () async {
+    final model = PortraitModelCatalog.curated.first;
+    final modelsRoot = '${root.path}/portrait_lab/models';
+    await PortraitDownloadSourceDefaults.save(PortraitDownloadSource.hfMirror);
+    statusQueue.add(<String, Object?>{
+      'state': 'success',
+      'modelId': model.id,
+      'path': '$modelsRoot/${model.id}',
+    });
+
+    final downloader = AndroidPortraitModelDownloadService(
+      channel: channel,
+      rootDirectoryProvider: () async => root,
+      pollInterval: Duration.zero,
+    );
+    await downloader.download(model).toList();
+
+    final start = calls.firstWhere((call) => call.method == 'start');
+    final args = Map<Object?, Object?>.from(start.arguments as Map);
+    final original = Uri.parse(model.downloadUrl);
+    final resolved = Uri.parse(args['url'] as String);
+    expect(resolved.host, 'hf-mirror.com');
+    expect(resolved.path, original.path);
+    expect(resolved.query, original.query);
   });
 
   test('R7 cancel is delegated to native foreground service', () async {
