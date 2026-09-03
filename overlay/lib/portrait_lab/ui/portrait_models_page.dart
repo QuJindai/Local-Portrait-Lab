@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../domain/portrait_model.dart';
+import '../infrastructure/portrait_download_source.dart';
 import '../infrastructure/portrait_model_downloader.dart';
 import 'portrait_input_picker.dart';
 
@@ -25,12 +26,25 @@ class _PortraitModelsPageState extends State<PortraitModelsPage> {
   final Map<String, PortraitModelDownloadState> _states =
       <String, PortraitModelDownloadState>{};
   String? _activeModelId;
-  String _downloadSource = 'official';
+  PortraitDownloadSource _downloadSource = PortraitDownloadSourceDefaults.current;
 
   @override
   void initState() {
     super.initState();
     unawaited(_refreshInstalled());
+    unawaited(_restoreDownloadSource());
+  }
+
+  Future<void> _restoreDownloadSource() async {
+    final source = await PortraitDownloadSourceDefaults.load();
+    if (!mounted) return;
+    setState(() => _downloadSource = source);
+  }
+
+  void _setDownloadSource(PortraitDownloadSource source) {
+    if (_activeModelId != null) return;
+    setState(() => _downloadSource = source);
+    unawaited(PortraitDownloadSourceDefaults.save(source));
   }
 
   Future<void> _refreshInstalled() async {
@@ -209,16 +223,24 @@ class _PortraitModelsPageState extends State<PortraitModelsPage> {
                         ChoiceChip(
                           key: const Key('download-source-official'),
                           label: const Text('Hugging Face 官方'),
-                          selected: _downloadSource == 'official',
-                          onSelected: (_) =>
-                              setState(() => _downloadSource = 'official'),
+                          selected:
+                              _downloadSource == PortraitDownloadSource.official,
+                          onSelected: _activeModelId == null
+                              ? (_) => _setDownloadSource(
+                                    PortraitDownloadSource.official,
+                                  )
+                              : null,
                         ),
                         ChoiceChip(
                           key: const Key('download-source-hf-mirror'),
                           label: const Text('hf-mirror 国内镜像'),
-                          selected: _downloadSource == 'hf-mirror',
-                          onSelected: (_) =>
-                              setState(() => _downloadSource = 'hf-mirror'),
+                          selected:
+                              _downloadSource == PortraitDownloadSource.hfMirror,
+                          onSelected: _activeModelId == null
+                              ? (_) => _setDownloadSource(
+                                    PortraitDownloadSource.hfMirror,
+                                  )
+                              : null,
                         ),
                       ],
                     ),
