@@ -26,6 +26,22 @@ jobs:
           cache: true
       - name: Bootstrap locked Local-Diffusion upstream
         run: bash scripts/bootstrap_upstream.sh
+      - name: Verify R11 Android identity runtime contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP=_build/local-diffusion/android/app
+          PACK="$APP/src/main/kotlin/com/qujindai/localportraitlab/PortraitIdentityModelPack.kt"
+          MAIN="$APP/src/main/kotlin/com/qujindai/localportraitlab/MainActivity.kt"
+          test -s "$PACK"
+          grep -F 'onnxruntime-android:1.29.0' "$APP/build.gradle"
+          grep -F '5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91' "$PACK"
+          grep -F '4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43' "$PACK"
+          grep -F 'e4a3f08c753cb72d04e10aa0f7dbe3deebbf39567d4ead6dce08e98aa49e16af' "$PACK"
+          grep -F '5fe266f2006172a07f83644e1978f05dd589e263b5a83c0d4e2e8e4902dae061' "$PACK"
+          grep -F 'identityExecutor' "$MAIN"
+          grep -F 'com.qujindai.localportraitlab/identity_lock' "$MAIN"
+          ! find . -type f \( -name '*.onnx' -o -name 'emap.bin' \) -print -quit | grep -q .
       - name: Resolve Flutter packages
         working-directory: _build/local-diffusion
         run: flutter pub get
