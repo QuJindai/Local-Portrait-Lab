@@ -10,11 +10,14 @@ import java.util.concurrent.Executors
 class MainActivity : FlutterActivity() {
     private val galleryExecutor = Executors.newSingleThreadExecutor()
     private val qnnExecutor = Executors.newSingleThreadExecutor()
+    private val identityExecutor = Executors.newSingleThreadExecutor()
+    private val identityRuntime by lazy { PortraitIdentityRuntime(applicationContext) }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         configureModelDownloadChannel(flutterEngine)
         configureQnnBackendChannel(flutterEngine)
+        configureIdentityLockChannel(flutterEngine)
         configureGalleryChannel(flutterEngine)
     }
 
@@ -148,6 +151,92 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun configureIdentityLockChannel(flutterEngine: FlutterEngine) {
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            IDENTITY_LOCK_CHANNEL,
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "status" -> result.success(identityRuntime.status())
+
+                "prepareModels" -> identityExecutor.execute {
+                    try {
+                        // prepare() performs installation and real source identity extraction;
+                        // model-only prewarming is intentionally not exposed as fake readiness.
+                        runOnUiThread { result.success(identityRuntime.status()) }
+                    } catch (error: Exception) {
+                        runOnUiThread {
+                            result.error("IDENTITY_PREPARE_FAILED", error.message, null)
+                        }
+                    }
+                }
+
+                "prepare" -> {
+                    val sourcePath = call.argument<String>("sourcePath")
+                    if (sourcePath.isNullOrBlank()) {
+                        result.error("BAD_ARGS", "身份分析缺少源照片", null)
+                        return@setMethodCallHandler
+                    }
+                    identityExecutor.execute {
+                        try {
+                            val payload = identityRuntime.prepare(sourcePath)
+                            runOnUiThread { result.success(payload) }
+                        } catch (error: Exception) {
+                            runOnUiThread {
+                                result.error(
+                                    "IDENTITY_PREPARE_FAILED",
+                                    error.message ?: error.javaClass.simpleName,
+                                    null,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                "lock" -> {
+                    val token = call.argument<String>("token")
+                    val styledPath = call.argument<String>("styledPath")
+                    val strength = call.argument<Number>("strength")?.toDouble() ?: 0.88
+                    val minSimilarity =
+                        call.argument<Number>("minSimilarity")?.toDouble() ?: 0.40
+                    val minImprovement =
+                        call.argument<Number>("minImprovement")?.toDouble() ?: 0.08
+                    if (token.isNullOrBlank() || styledPath.isNullOrBlank()) {
+                        result.error("BAD_ARGS", "身份锁定参数不完整", null)
+                        return@setMethodCallHandler
+                    }
+                    identityExecutor.execute {
+                        try {
+                            val payload = identityRuntime.lock(
+                                token = token,
+                                styledPath = styledPath,
+                                strength = strength,
+                                minSimilarity = minSimilarity,
+                                minImprovement = minImprovement,
+                            )
+                            runOnUiThread { result.success(payload) }
+                        } catch (error: Exception) {
+                            runOnUiThread {
+                                result.error(
+                                    "IDENTITY_LOCK_FAILED",
+                                    error.message ?: error.javaClass.simpleName,
+                                    null,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                "cancel" -> identityExecutor.execute {
+                    identityRuntime.cancel()
+                    runOnUiThread { result.success(null) }
+                }
+
+                else -> result.notImplemented()
+            }
+        }
+    }
+
     private fun configureGalleryChannel(flutterEngine: FlutterEngine) {
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -209,6 +298,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        identityRuntime.cancel()
+        identityExecutor.shutdownNow()
         qnnExecutor.shutdownNow()
         galleryExecutor.shutdownNow()
         super.onDestroy()
@@ -219,6 +310,8 @@ class MainActivity : FlutterActivity() {
             "com.qujindai.localportraitlab/model_download"
         private const val QNN_BACKEND_CHANNEL =
             "com.qujindai.localportraitlab/qnn_backend"
+        private const val IDENTITY_LOCK_CHANNEL =
+            "com.qujindai.localportraitlab/identity_lock"
         private const val GALLERY_CHANNEL =
             "com.qujindai.localportraitlab/gallery"
     }

@@ -12,7 +12,7 @@ permissions:
 jobs:
   r11-fast:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Bootstrap locked Local-Diffusion upstream
@@ -23,16 +23,23 @@ jobs:
           set -euo pipefail
           APP=_build/local-diffusion/android/app
           PACK="$APP/src/main/kotlin/com/qujindai/localportraitlab/PortraitIdentityModelPack.kt"
+          RUNTIME="$APP/src/main/kotlin/com/qujindai/localportraitlab/PortraitIdentityRuntime.kt"
           MAIN="$APP/src/main/kotlin/com/qujindai/localportraitlab/MainActivity.kt"
+          SWAPPER="$APP/src/main/java/com/pv/androidfacefusion/FaceSwapper.java"
           test -s "$PACK"
+          test -s "$RUNTIME"
+          test -s "$SWAPPER"
           grep -F 'onnxruntime-android:1.29.0' "$APP/build.gradle"
           grep -F '5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91' "$PACK"
           grep -F '4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43' "$PACK"
           grep -F 'e4a3f08c753cb72d04e10aa0f7dbe3deebbf39567d4ead6dce08e98aa49e16af' "$PACK"
           grep -F '5fe266f2006172a07f83644e1978f05dd589e263b5a83c0d4e2e8e4902dae061' "$PACK"
+          grep -F 'SCRFD -> ArcFace -> INSwapper -> ArcFace QA' "$RUNTIME"
           grep -F 'identityExecutor' "$MAIN"
           grep -F 'com.qujindai.localportraitlab/identity_lock' "$MAIN"
-          ! find . -type f \( -name '*.onnx' -o -name 'emap.bin' \) -print -quit | grep -q .
+          grep -F 'new java.io.FileInputStream(new File(context.getFilesDir(), "emap.bin"))' "$SWAPPER"
+          ! find overlay -type f \( -name '*.onnx' -o -name 'emap.bin' \) -print -quit | grep -q .
+          ! find _build/local-diffusion/android/app/src/main -type f \( -name '*.onnx' -o -name 'emap.bin' \) -print -quit | grep -q .
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -51,3 +58,6 @@ jobs:
       - name: Compile all Portrait Lab tests
         working-directory: _build/local-diffusion
         run: flutter test test/portrait_lab
+      - name: Compile R11 Android identity runtime
+        working-directory: _build/local-diffusion
+        run: flutter build apk --debug --target lib/portrait_lab_entry.dart --build-name=0.11.0-r11-dev --build-number=12

@@ -4,8 +4,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UPSTREAM_URL="https://github.com/rmatif/Local-Diffusion.git"
 UPSTREAM_COMMIT="184b7f92cf2f810e7d5eb4b04b190a5da829005f"
+IDENTITY_SOURCE_URL="https://github.com/Parasaran-Python/android-face-fusion.git"
+IDENTITY_SOURCE_COMMIT="f38a70e4bacaab4132538421c471f9d4d3ccac00"
 BUILD_ROOT="${PORTRAIT_BUILD_ROOT:-$ROOT_DIR/_build}"
 UPSTREAM_DIR="$BUILD_ROOT/local-diffusion"
+IDENTITY_SOURCE_DIR="$BUILD_ROOT/android-face-fusion-source"
 
 progress() {
   printf '[portrait-bootstrap] %s\n' "$*"
@@ -58,10 +61,50 @@ if [[ -d "$ROOT_DIR/overlay/android" ]]; then
   cp -a "$ROOT_DIR/overlay/android/." "$UPSTREAM_DIR/android/"
 fi
 
+progress "vendor pinned MIT Android face identity source"
+rm -rf "$IDENTITY_SOURCE_DIR"
+git clone --filter=blob:none --no-checkout "$IDENTITY_SOURCE_URL" "$IDENTITY_SOURCE_DIR"
+git -C "$IDENTITY_SOURCE_DIR" checkout --detach "$IDENTITY_SOURCE_COMMIT"
+identity_actual="$(git -C "$IDENTITY_SOURCE_DIR" rev-parse HEAD)"
+if [[ "$identity_actual" != "$IDENTITY_SOURCE_COMMIT" ]]; then
+  printf 'ERROR: expected identity source %s, got %s\n' "$IDENTITY_SOURCE_COMMIT" "$identity_actual" >&2
+  exit 22
+fi
+IDENTITY_JAVA_SRC="$IDENTITY_SOURCE_DIR/app/src/main/java/com/pv/androidfacefusion"
+IDENTITY_JAVA_DST="$UPSTREAM_DIR/android/app/src/main/java/com/pv/androidfacefusion"
+mkdir -p "$IDENTITY_JAVA_DST"
+for name in FaceDetector.java FaceEmbedder.java FaceSwapper.java ImageUtils.java OrtSessionHelper.java ModelDownloader.java; do
+  test -s "$IDENTITY_JAVA_SRC/$name"
+  cp "$IDENTITY_JAVA_SRC/$name" "$IDENTITY_JAVA_DST/$name"
+done
+
+# The upstream MIT sample embeds emap.bin as an asset. Portrait Lab deliberately
+# keeps all identity weights/data out of the APK, so load the verified runtime
+# copy from app-private filesDir instead.
+python3 - "$IDENTITY_JAVA_DST/FaceSwapper.java" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+s = p.read_text(encoding='utf-8')
+old = 'try (InputStream fis = context.getAssets().open("emap.bin")) {'
+new = 'try (InputStream fis = new java.io.FileInputStream(new File(context.getFilesDir(), "emap.bin"))) {'
+if old not in s:
+    raise SystemExit('FaceSwapper EMAP asset anchor missing')
+s = s.replace(old, new, 1)
+s = s.replace('Loading EMAP from assets...', 'Loading verified EMAP from app-private storage...', 1)
+s = s.replace('loaded successfully from assets', 'loaded successfully from app-private storage', 1)
+p.write_text(s, encoding='utf-8')
+PY
+
+grep -F 'new java.io.FileInputStream(new File(context.getFilesDir(), "emap.bin"))' "$IDENTITY_JAVA_DST/FaceSwapper.java"
+
 cat > "$BUILD_ROOT/UPSTREAM_LOCK.txt" <<EOF
 url=$UPSTREAM_URL
 commit=$UPSTREAM_COMMIT
 actual=$actual
+identity_source_url=$IDENTITY_SOURCE_URL
+identity_source_commit=$IDENTITY_SOURCE_COMMIT
+identity_source_actual=$identity_actual
 EOF
 
 progress "ready: $UPSTREAM_DIR"
