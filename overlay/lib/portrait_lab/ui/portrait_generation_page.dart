@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../application/portrait_generation_controller.dart';
 import '../domain/portrait_generation_request.dart';
 import '../domain/portrait_generation_state.dart';
+import '../domain/portrait_identity.dart';
 import '../domain/portrait_style.dart';
 import '../infrastructure/local_diffusion_runtime_profile.dart';
 import '../infrastructure/portrait_compute_backend.dart';
@@ -35,6 +36,7 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
   int _steps = 0;
   String _stage = '准备图片';
   String? _error;
+  PortraitIdentityDiagnostics? _identityDiagnostics;
   bool _cancelled = false;
   bool _started = false;
   late final Stopwatch _stopwatch;
@@ -94,12 +96,26 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
       switch (state) {
         case PortraitGenerationPreparing():
           _stage = '准备图片';
+        case PortraitGenerationDetectingIdentity():
+          _stage = '检测身份';
+        case PortraitGenerationExtractingIdentity():
+          _stage = '提取身份';
         case PortraitGenerationLoadingModel():
           _stage = '加载本地模型';
         case PortraitGenerationSampling(:final step, :final steps):
           _step = step;
           _steps = steps;
-          _stage = '扩散采样';
+          _stage = 'QNN 风格生成';
+        case PortraitGenerationLockingIdentity():
+          _stage = '锁定人物身份';
+        case PortraitGenerationVerifyingIdentity():
+          _stage = '验证身份';
+        case PortraitGenerationIdentityVerified(:final diagnostics):
+          _identityDiagnostics = diagnostics;
+          _stage = '身份验证通过';
+        case PortraitGenerationIdentityLockFailed(:final message):
+          _error = message;
+          _stage = '身份验证失败';
         case PortraitGenerationCompleted():
           _stage = '完成';
         case PortraitGenerationCancelled():
@@ -147,15 +163,15 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
                 ? 'GPU 本地生成'
                 : '本地生成 · CPU 回退';
     final diagnosticLabel = usingStandaloneQnn
-        ? 'NPU · QNN/HTP · Portrait Lab Standalone'
+        ? 'NPU · QNN/HTP · R11 Identity Lock'
         : usingDream
-            ? 'NPU · QNN/HTP · DREAM Host'
-            : '${computeBackend.displayLabel} · ${runtimeProfile.isFastPath ? 'LCM FAST · ' : ''}${runtimeProfile.label}';
+            ? 'NPU · QNN/HTP · DREAM Host · R11 Identity Lock'
+            : '${computeBackend.displayLabel} · R11 Identity Lock';
     final diagnosticDetail = usingStandaloneQnn
-        ? '127.0.0.1:8082 · SDXL 1024 → 3:4 · 已运行 ${elapsedSeconds.toStringAsFixed(1)}s'
+        ? 'QNN 127.0.0.1:8082 · SCRFD → ArcFace → INSwapper · ${elapsedSeconds.toStringAsFixed(1)}s'
         : usingDream
-            ? '127.0.0.1:8081 · SDXL 1024 → 3:4 · 已运行 ${elapsedSeconds.toStringAsFixed(1)}s'
-            : '${computeBackend.detailLabel} · 中心裁剪 ${request.width}×${request.height} RGB · 已运行 ${elapsedSeconds.toStringAsFixed(1)}s';
+            ? 'DREAM 127.0.0.1:8081 · SCRFD → ArcFace → INSwapper · ${elapsedSeconds.toStringAsFixed(1)}s'
+            : '${computeBackend.detailLabel} · ${runtimeProfile.label} · SCRFD → ArcFace → INSwapper · ${elapsedSeconds.toStringAsFixed(1)}s';
 
     return Scaffold(
       appBar: AppBar(
@@ -214,9 +230,11 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
                       child: Icon(
                         _cancelled
                             ? Icons.stop_rounded
-                            : usingQnn
-                                ? Icons.bolt_rounded
-                                : Icons.auto_awesome_rounded,
+                            : _stage.contains('身份')
+                                ? Icons.face_retouching_natural_rounded
+                                : usingQnn
+                                    ? Icons.bolt_rounded
+                                    : Icons.auto_awesome_rounded,
                         size: 39,
                         color: _brand,
                       ),
@@ -253,20 +271,14 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
-                    usingQnn
-                        ? Icons.bolt_rounded
-                        : computeBackend.isGpuAccelerated
-                            ? Icons.memory_rounded
-                            : runtimeProfile.isFastPath
-                                ? Icons.bolt_rounded
+                    _stage.contains('身份')
+                        ? Icons.verified_user_rounded
+                        : usingQnn
+                            ? Icons.bolt_rounded
+                            : computeBackend.isGpuAccelerated
+                                ? Icons.memory_rounded
                                 : Icons.speed_rounded,
-                    color: usingQnn
-                        ? const Color(0xFF6D4CF5)
-                        : computeBackend.isGpuAccelerated
-                            ? const Color(0xFF3478F6)
-                            : runtimeProfile.isFastPath
-                                ? const Color(0xFF6D4CF5)
-                                : const Color(0xFF756E80),
+                    color: _brand,
                     size: 20,
                   ),
                   const SizedBox(width: 9),
@@ -284,6 +296,14 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
                           diagnosticDetail,
                           style: const TextStyle(fontSize: 11, color: Color(0xFF766F81)),
                         ),
+                        if (_identityDiagnostics case final d?) ...[
+                          const SizedBox(height: 5),
+                          Text(
+                            'Identity PASS · ${d.preSimilarity.toStringAsFixed(3)} → ${d.postSimilarity.toStringAsFixed(3)} · Δ${d.improvement.toStringAsFixed(3)} · ${d.lockMillis}ms',
+                            key: const Key('portrait-identity-diagnostics'),
+                            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -301,31 +321,39 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
               child: Column(
                 children: [
                   _StageRow(
-                    title: '分析人物特征',
-                    subtitle: '读取并对齐本地照片',
+                    title: '分析身份特征',
+                    subtitle: 'SCRFD 检测 · ArcFace 512D 身份向量',
                     state: _stageState(0, currentStage),
                   ),
                   const _StageConnector(),
                   _StageRow(
-                    title: '构建人像形象',
+                    title: 'QNN 风格生成',
                     subtitle: usingStandaloneQnn
-                        ? '启动 Portrait Lab 本机 QNN/HTP 模型'
+                        ? '本机 QNN/HTP · 风格与身份分离控制'
                         : usingDream
-                            ? '连接 DREAM Host QNN/HTP 模型'
-                            : '加载本地模型',
+                            ? 'DREAM Host QNN/HTP · 风格生成'
+                            : '本地扩散模型 · 风格生成',
                     state: _stageState(1, currentStage),
                   ),
                   const _StageConnector(),
                   _StageRow(
-                    title: '生成最终画面',
-                    subtitle: hasSamplingProgress ? '$_step / $_steps · $percent%' : '等待真实进度',
+                    title: '锁定人物身份',
+                    subtitle: 'INSwapper 仅校正脸部 ROI，不重绘身体与风格',
                     state: _stageState(2, currentStage),
                   ),
                   const _StageConnector(),
                   _StageRow(
-                    title: '保存本地作品',
-                    subtitle: '生成后自动写入应用目录',
+                    title: '验证身份',
+                    subtitle: _identityDiagnostics == null
+                        ? 'ArcFace cosine 硬门禁'
+                        : '${_identityDiagnostics!.preSimilarity.toStringAsFixed(3)} → ${_identityDiagnostics!.postSimilarity.toStringAsFixed(3)}',
                     state: _stageState(3, currentStage),
+                  ),
+                  const _StageConnector(),
+                  _StageRow(
+                    title: '保存本地作品',
+                    subtitle: '只有身份门禁通过才允许完成',
+                    state: _stageState(4, currentStage),
                   ),
                 ],
               ),
@@ -340,7 +368,7 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
               ),
             ),
             const SizedBox(height: 10),
-            if (hasSamplingProgress)
+            if (hasSamplingProgress && _stage == 'QNN 风格生成')
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -349,10 +377,10 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
                 ],
               )
             else
-              const Text(
-                '等待模型真实进度回调…',
+              Text(
+                _stage.contains('身份') ? '执行真实身份流水线…' : '等待模型真实进度回调…',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Color(0xFF8B8497), fontSize: 12),
+                style: const TextStyle(color: Color(0xFF8B8497), fontSize: 12),
               ),
             if (_error != null) ...[
               const SizedBox(height: 16),
@@ -381,10 +409,10 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
             const SizedBox(height: 10),
             Text(
               usingStandaloneQnn
-                  ? 'R8 由 Portrait Lab 自己启动本机 QNN/HTP 后端（127.0.0.1:8082）；不需要开启 DREAM Host。'
+                  ? 'R11：QNN/HTP 只负责全图风格生成；SCRFD → ArcFace → INSwapper 独立负责身份锁定，均在本机执行。'
                   : usingDream
-                      ? 'DREAM Host 为可选兼容路径（127.0.0.1:8081）；照片和结果仍不离开设备。'
-                      : 'R8 fallback 展示实际 FFI backend；GPU · Vulkan 表示推理 isolate 也加载 Vulkan。',
+                      ? 'DREAM Host 仍是可选兼容路径；身份锁定在当前设备独立完成。'
+                      : 'R11 fallback 同样进入独立身份门禁；照片与身份向量不上传。',
               textAlign: TextAlign.center,
               style: const TextStyle(color: Color(0xFF96909F), fontSize: 10.5),
             ),
@@ -395,11 +423,12 @@ class _PortraitGenerationPageState extends State<PortraitGenerationPage> {
   }
 
   int _stageIndex() {
-    if (_cancelled || _error != null) return 2;
-    if (_stage == '准备图片') return 0;
-    if (_stage == '加载本地模型') return 1;
-    if (_stage == '扩散采样') return 2;
-    if (_stage == '完成') return 3;
+    if (_stage == '准备图片' || _stage == '检测身份' || _stage == '提取身份') return 0;
+    if (_stage == '加载本地模型' || _stage == 'QNN 风格生成') return 1;
+    if (_stage == '锁定人物身份') return 2;
+    if (_stage == '验证身份' || _stage == '身份验证通过' || _stage == '身份验证失败') return 3;
+    if (_stage == '完成') return 4;
+    if (_cancelled || _error != null) return 3;
     return 0;
   }
 
