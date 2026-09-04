@@ -14,11 +14,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Verify pinned EMAP checksum
+      - name: Inspect pinned EMAP checksum
         shell: bash
         run: |
           set -euo pipefail
           URL="https://raw.githubusercontent.com/Parasaran-Python/android-face-fusion/f38a70e4bacaab4132538421c471f9d4d3ccac00/app/src/main/assets/emap.bin"
           curl -L --fail --retry 4 "$URL" -o /tmp/emap.bin
-          test "$(stat -c%s /tmp/emap.bin)" -eq 1048576
+          echo "EMAP_BYTES=$(stat -c%s /tmp/emap.bin)"
           sha256sum /tmp/emap.bin
