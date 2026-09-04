@@ -1,3 +1,4 @@
+import 'portrait_identity.dart';
 import 'portrait_style.dart';
 
 class PortraitInputException implements Exception {
@@ -30,6 +31,7 @@ class PortraitGenerationRequest {
     required this.steps,
     required this.width,
     required this.height,
+    this.identityPolicy = PortraitIdentityPolicy.standard,
   });
 
   factory PortraitGenerationRequest.fromStyle({
@@ -59,6 +61,7 @@ class PortraitGenerationRequest {
       steps: spec.steps,
       width: spec.width,
       height: spec.height,
+      identityPolicy: PortraitIdentityPolicy.standard,
     );
   }
 
@@ -72,4 +75,5 @@ class PortraitGenerationRequest {
   final int steps;
   final int width;
   final int height;
+  final PortraitIdentityPolicy identityPolicy;
 }
