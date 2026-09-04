@@ -1,0 +1,247 @@
+name: Portrait R11 Full APK
+
+on:
+  push:
+    branches:
+      - feat/portrait-r11-identity-lock
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  LOCAL_DREAM_SHA: a7666f6198412a58c6eb1eacc28828aa40c7d7ae
+  NDK_VERSION: 28.2.13676358
+  QAIRT_URL: https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/2.39.0.250926/v2.39.0.250926.zip
+
+jobs:
+  r11-full-apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK tools
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Flutter 3.27.4
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          channel: stable
+          cache: true
+
+      - name: Bootstrap pinned Portrait Lab sources
+        run: bash scripts/bootstrap_upstream.sh
+
+      - name: Verify R11 identity-lock source contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP=_build/local-diffusion/android/app
+          PACK="$APP/src/main/kotlin/com/qujindai/localportraitlab/PortraitIdentityModelPack.kt"
+          RUNTIME="$APP/src/main/kotlin/com/qujindai/localportraitlab/PortraitIdentityRuntime.kt"
+          MAIN="$APP/src/main/kotlin/com/qujindai/localportraitlab/MainActivity.kt"
+          SWAPPER="$APP/src/main/java/com/pv/androidfacefusion/FaceSwapper.java"
+          ENGINE=_build/local-diffusion/lib/portrait_lab/infrastructure/portrait_identity_lock_engine.dart
+          grep -F 'onnxruntime-android:1.29.0' "$APP/build.gradle"
+          grep -F '5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91' "$PACK"
+          grep -F '4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43' "$PACK"
+          grep -F 'e4a3f08c753cb72d04e10aa0f7dbe3deebbf39567d4ead6dce08e98aa49e16af' "$PACK"
+          grep -F '5fe266f2006172a07f83644e1978f05dd589e263b5a83c0d4e2e8e4902dae061' "$PACK"
+          grep -F 'SCRFD -> ArcFace -> INSwapper -> ArcFace QA' "$RUNTIME"
+          grep -F 'identityExecutor' "$MAIN"
+          grep -F 'com.qujindai.localportraitlab/identity_lock' "$MAIN"
+          grep -F 'new java.io.FileInputStream(new File(context.getFilesDir(), "emap.bin"))' "$SWAPPER"
+          grep -F 'IdentityLockedPortraitEngine' "$ENGINE"
+          test -s THIRD_PARTY_ANDROID_FACE_FUSION_MIT.md
+          ! find _build/local-diffusion/android/app/src/main -type f \( -name '*.onnx' -o -name 'emap.bin' \) -print -quit | grep -q .
+          echo R11_IDENTITY_LOCK_SOURCE_CONTRACT_PASS
+
+      - name: Verify standalone QNN source contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVICE=_build/local-diffusion/android/app/src/main/kotlin/com/qujindai/localportraitlab/PortraitQnnBackendService.kt
+          MAIN=_build/local-diffusion/android/app/src/main/kotlin/com/qujindai/localportraitlab/MainActivity.kt
+          ROUTER=_build/local-diffusion/lib/portrait_lab/infrastructure/portrait_backend_router_engine.dart
+          grep -F 'libstable_diffusion_core.so' "$SERVICE"
+          grep -F '127.0.0.1' "$SERVICE"
+          grep -F '8082' "$SERVICE"
+          grep -F 'DSP_LIBRARY_PATH' "$SERVICE"
+          grep -F 'com.qujindai.localportraitlab/qnn_backend' "$MAIN"
+          grep -F "'qnn' => _standaloneQnnEngine" "$ROUTER"
+          echo R11_QNN_SOURCE_CONTRACT_PASS
+
+      - name: Resolve Flutter packages
+        working-directory: _build/local-diffusion
+        run: flutter pub get
+
+      - name: Run complete Portrait Lab tests
+        working-directory: _build/local-diffusion
+        run: flutter test test/portrait_lab
+
+      - name: Prepare Android native build environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager --channel=3 "ndk;${NDK_VERSION}"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ninja-build ccache
+          rustup target add aarch64-linux-android
+          test -d "$ANDROID_HOME/ndk/$NDK_VERSION"
+          sudo mkdir -p /data
+          sudo ln -sfn "$ANDROID_HOME/ndk/$NDK_VERSION" /data/android-ndk-r28
+          test -f /data/android-ndk-r28/build/cmake/android.toolchain.cmake
+
+      - name: Clone pinned Local Dream QNN source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf third_party/local-dream
+          mkdir -p third_party
+          git clone --recursive https://github.com/xororz/local-dream.git third_party/local-dream
+          cd third_party/local-dream
+          git checkout "$LOCAL_DREAM_SHA"
+          git submodule update --init --recursive
+          test "$(git rev-parse HEAD)" = "$LOCAL_DREAM_SHA"
+
+      - name: Apply pinned tokenizers Rust compatibility patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUST_FILE=third_party/local-dream/app/src/main/cpp/3rdparty/tokenizers-cpp/rust/src/lib.rs
+          python3 - "$RUST_FILE" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          s = p.read_text(encoding='utf-8')
+          repls = {
+              '*out_len = (*handle).decode_str.len();':
+                  '*out_len = (&(*handle).decode_str).len();',
+              '*out_len = (*handle).id_to_token_result.len();':
+                  '*out_len = (&(*handle).id_to_token_result).len();',
+          }
+          for old, new in repls.items():
+              count = s.count(old)
+              if count != 1:
+                  raise SystemExit(f'rust compatibility anchor mismatch: {old!r}, count={count}')
+              s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+          grep -Fq '(&(*handle).decode_str).len()' "$RUST_FILE"
+          grep -Fq '(&(*handle).id_to_token_result).len()' "$RUST_FILE"
+
+      - name: Download QAIRT Community SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/qairt /tmp/qairt.zip
+          mkdir -p /tmp/qairt
+          curl -L --fail --retry 4 --retry-all-errors "$QAIRT_URL" -o /tmp/qairt.zip
+          unzip -q /tmp/qairt.zip -d /tmp/qairt
+          HEADER="$(find /tmp/qairt -type f -path '*/include/QNN/QnnTypes.h' -print -quit)"
+          test -n "$HEADER"
+          QNN_ROOT="$(dirname "$(dirname "$(dirname "$HEADER")")")"
+          test -s "$QNN_ROOT/lib/aarch64-android/libQnnHtp.so"
+          test -d "$QNN_ROOT/examples/QNN/SampleApp/SampleApp"
+          sudo mkdir -p /data/qairt
+          sudo ln -sfn "$QNN_ROOT" /data/qairt/2.39.0.250926
+          echo "QNN_SDK_ROOT=$QNN_ROOT" >> "$GITHUB_ENV"
+
+      - name: Build pinned Local Dream QNN native core
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/$NDK_VERSION"
+          cd third_party/local-dream/app/src/main/cpp
+          bash build.sh 2>&1 | tee ../../../../../../qnn-native-r11.log
+          test -s ../jniLibs/arm64-v8a/libstable_diffusion_core.so
+          test -s ../assets/qnnlibs/libQnnHtp.so
+
+      - name: Print QNN native failure tail
+        if: failure()
+        shell: bash
+        run: |
+          echo '===== R11 QNN NATIVE FAILURE TAIL ====='
+          tail -n 240 qnn-native-r11.log || true
+          echo '===== END R11 QNN NATIVE FAILURE TAIL ====='
+
+      - name: Upload R11 QNN native diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r11-qnn-native-diagnostics
+          path: |
+            qnn-native-r11.log
+            third_party/local-dream/app/src/main/cpp/build/**/CMakeCache.txt
+            third_party/local-dream/app/src/main/cpp/build/**/CMakeFiles/CMakeOutput.log
+            third_party/local-dream/app/src/main/cpp/build/**/CMakeFiles/CMakeError.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Stage standalone QNN core into Portrait Lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP=_build/local-diffusion/android/app/src/main
+          mkdir -p "$APP/jniLibs/arm64-v8a" "$APP/assets"
+          cp third_party/local-dream/app/src/main/jniLibs/arm64-v8a/libstable_diffusion_core.so \
+            "$APP/jniLibs/arm64-v8a/libstable_diffusion_core.so"
+          rm -rf "$APP/assets/qnnlibs"
+          cp -R third_party/local-dream/app/src/main/assets/qnnlibs "$APP/assets/qnnlibs"
+          test -s "$APP/jniLibs/arm64-v8a/libstable_diffusion_core.so"
+          test -s "$APP/assets/qnnlibs/libQnnHtp.so"
+
+      - name: Build Portrait Lab R11 QNN identity-lock debug APK
+        working-directory: _build/local-diffusion
+        run: flutter build apk --debug --target lib/portrait_lab_entry.dart --build-name=0.11.0-r11 --build-number=12
+
+      - name: Verify QNN and ONNX runtimes are bundled without identity weights
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=_build/local-diffusion/build/app/outputs/flutter-apk/app-debug.apk
+          zipinfo -1 "$APK" > /tmp/r11-apk-files.txt
+          grep -Fx 'lib/arm64-v8a/libstable_diffusion_core.so' /tmp/r11-apk-files.txt
+          grep -Fx 'lib/arm64-v8a/libstable-diffusion_vulkan.so' /tmp/r11-apk-files.txt
+          grep -Fx 'lib/arm64-v8a/libstable-diffusion.so' /tmp/r11-apk-files.txt
+          grep -F 'assets/qnnlibs/libQnnHtp.so' /tmp/r11-apk-files.txt
+          grep -E 'lib/arm64-v8a/libonnxruntime.*\.so$' /tmp/r11-apk-files.txt
+          if grep -E '(^|/)(det_10g\.onnx|w600k_r50\.onnx|inswapper_128\.onnx|emap\.bin)$' /tmp/r11-apk-files.txt; then
+            echo 'ERROR: identity model weight unexpectedly bundled in APK' >&2
+            exit 31
+          fi
+          echo R11_APK_RUNTIME_BUNDLE_PASS
+
+      - name: Stage R11 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp _build/local-diffusion/build/app/outputs/flutter-apk/app-debug.apk \
+            dist/Local-Portrait-Lab_R11_QNN_ID_LOCK_debug.apk
+          sha256sum dist/Local-Portrait-Lab_R11_QNN_ID_LOCK_debug.apk | \
+            tee dist/Local-Portrait-Lab_R11_QNN_ID_LOCK_debug.sha256
+          cp THIRD_PARTY_DREAM_QNN_NONCOMMERCIAL.md dist/
+          cp THIRD_PARTY_ANDROID_FACE_FUSION_MIT.md dist/
+
+      - name: Upload Portrait Lab R11 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Local-Portrait-Lab_R11_QNN_ID_LOCK_debug
+          path: |
+            dist/Local-Portrait-Lab_R11_QNN_ID_LOCK_debug.apk
+            dist/Local-Portrait-Lab_R11_QNN_ID_LOCK_debug.sha256
+            dist/THIRD_PARTY_DREAM_QNN_NONCOMMERCIAL.md
+            dist/THIRD_PARTY_ANDROID_FACE_FUSION_MIT.md
+            qnn-native-r11.log
+          if-no-files-found: error
+          retention-days: 14
