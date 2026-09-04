@@ -22,7 +22,7 @@ void main() {
       style: PortraitStyle.manga,
     );
 
-    expect(request.identityPolicy, const PortraitIdentityPolicy.standard);
+    expect(request.identityPolicy, PortraitIdentityPolicy.standard);
     expect(request.strength, closeTo(PortraitStyle.manga.spec.strength, 0.0001));
   });
 
