@@ -1,4 +1,4 @@
-name: Portrait R11 Identity Metadata
+name: Portrait R11 Fast Gate
 
 on:
   push:
@@ -10,15 +10,28 @@ permissions:
   contents: read
 
 jobs:
-  identity-metadata:
+  r11-fast:
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect pinned EMAP checksum
-        shell: bash
-        run: |
-          set -euo pipefail
-          URL="https://raw.githubusercontent.com/Parasaran-Python/android-face-fusion/f38a70e4bacaab4132538421c471f9d4d3ccac00/app/src/main/assets/emap.bin"
-          curl -L --fail --retry 4 "$URL" -o /tmp/emap.bin
-          echo "EMAP_BYTES=$(stat -c%s /tmp/emap.bin)"
-          sha256sum /tmp/emap.bin
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          channel: stable
+          cache: true
+      - name: Bootstrap locked Local-Diffusion upstream
+        run: bash scripts/bootstrap_upstream.sh
+      - name: Resolve Flutter packages
+        working-directory: _build/local-diffusion
+        run: flutter pub get
+      - name: Run R11 identity tests
+        working-directory: _build/local-diffusion
+        run: flutter test test/portrait_lab/portrait_r11_identity_lock_test.dart
+      - name: Compile all Portrait Lab tests
+        working-directory: _build/local-diffusion
+        run: flutter test test/portrait_lab
