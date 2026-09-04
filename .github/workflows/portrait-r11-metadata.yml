@@ -15,15 +15,6 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.27.4'
-          channel: stable
-          cache: true
       - name: Bootstrap locked Local-Diffusion upstream
         run: bash scripts/bootstrap_upstream.sh
       - name: Verify R11 Android identity runtime contract
@@ -42,6 +33,15 @@ jobs:
           grep -F 'identityExecutor' "$MAIN"
           grep -F 'com.qujindai.localportraitlab/identity_lock' "$MAIN"
           ! find . -type f \( -name '*.onnx' -o -name 'emap.bin' \) -print -quit | grep -q .
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          channel: stable
+          cache: true
       - name: Resolve Flutter packages
         working-directory: _build/local-diffusion
         run: flutter pub get
